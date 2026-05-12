@@ -12,7 +12,11 @@ import {
   Brain,
   CheckCircle2,
   HelpCircle,
-  ArrowUpRight
+  ArrowUpRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 import {
   getCorpusById,
@@ -1537,6 +1541,37 @@ function AdaptiveSubModulePanel({ subModule }) {
   );
 }
 
+function PathNavigator({ nodes, selectedNodeId, onSelectNode }) {
+  const accessStep = 100 / Math.max(accessibilityLevels.length - 1, 1);
+  const getY = (level) => 100 - ((clamp(level, 1, 6) - 1) / 5) * 100;
+
+  return (
+    <div className="path-navigator" aria-label="Path Navigator">
+      <div className="path-navigator-title">Path Navigator</div>
+      <div className="path-navigator-field">
+        {nodes.map((node, index) => {
+          const locus = getLearningLocusFromComponent(node);
+          const x = getAccessIndex(node.access) * accessStep;
+          const y = getY(node.dok);
+          return (
+            <button
+              key={node.id}
+              type="button"
+              className={`navigator-dot navigator-${locus.key}${node.id === selectedNodeId ? " active" : ""}`}
+              style={{ left: `${x}%`, top: `${y}%` }}
+              onClick={() => onSelectNode(node.id)}
+              title={`${index + 1}. ${node.title}`}
+              aria-label={`Select ${node.title}`}
+            >
+              {index + 1}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TelescopicProjection({ parentNode, subModule, expanded, onToggle }) {
   if (!subModule) return null;
   const previewPath = subModule.learningPath.slice(0, 5);
@@ -1647,6 +1682,10 @@ function MasteryLearningArea({ enabled, mode, learningScreen, checkpoint, subMod
 function App() {
   const [mode, setMode] = React.useState("designer");
   const [showLearnerPreview, setShowLearnerPreview] = React.useState(false);
+  const [isDesignerPanelCollapsed, setIsDesignerPanelCollapsed] = React.useState(false);
+  const [isSlidePanelCollapsed, setIsSlidePanelCollapsed] = React.useState(false);
+  const [isMapFocusMode, setIsMapFocusMode] = React.useState(false);
+  const [paneWidths, setPaneWidths] = React.useState({ left: 360, right: 440 });
   const [form, setForm] = React.useState({
     audience: "General Public",
     theme: "Black Panther Party Free Breakfast Program",
@@ -1695,6 +1734,12 @@ function App() {
   const learningScreen = makeLearningScreen(selectedNode, slide, screenStatuses[selectedNode.id] ?? "not_started");
   const isDesignerMode = mode === "designer";
   const isLearnerMode = mode === "learner";
+  const showDesignerPanel = isDesignerMode && !isDesignerPanelCollapsed;
+  const showSlidePanel = !isSlidePanelCollapsed;
+  const dashboardStyle = {
+    "--left-panel-width": `${paneWidths.left}px`,
+    "--right-panel-width": `${paneWidths.right}px`
+  };
   const targetDokNumber = getDokFromSetting(form.targetDok, selectedNode?.dok ?? 3);
   const recommendedCorpusItems = getRecommendedCorpusItems({
     theme: form.theme,
@@ -1705,6 +1750,45 @@ function App() {
 
   function updateForm(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function startPaneResize(side, event) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = paneWidths[side];
+    const minWidth = side === "left" ? 260 : 300;
+    const maxWidth = side === "left" ? 520 : 560;
+
+    function handleMove(moveEvent) {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth = side === "left" ? startWidth + delta : startWidth - delta;
+      setPaneWidths((current) => ({
+        ...current,
+        [side]: clamp(nextWidth, minWidth, maxWidth)
+      }));
+    }
+
+    function stopResize() {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", stopResize);
+      document.body.classList.remove("is-resizing-pane");
+    }
+
+    document.body.classList.add("is-resizing-pane");
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", stopResize);
+  }
+
+  function enterMapFocusMode() {
+    setIsMapFocusMode(true);
+    setIsDesignerPanelCollapsed(true);
+    setIsSlidePanelCollapsed(true);
+  }
+
+  function exitMapFocusMode() {
+    setIsMapFocusMode(false);
+    setIsDesignerPanelCollapsed(false);
+    setIsSlidePanelCollapsed(false);
   }
 
   function generatePath() {
@@ -1879,8 +1963,23 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
         </div>
       </header>
 
-      <section className={`dashboard ${isLearnerMode ? "learner-dashboard" : "designer-dashboard"}`}>
-        {isDesignerMode ? (
+      <section
+        className={`dashboard ${isLearnerMode ? "learner-dashboard" : "designer-dashboard"}${isDesignerMode && isDesignerPanelCollapsed ? " designer-collapsed" : ""}${!showSlidePanel ? " slide-collapsed" : ""}${isMapFocusMode ? " map-focus-mode" : ""}`}
+        style={dashboardStyle}
+      >
+        {isDesignerMode && isDesignerPanelCollapsed ? (
+          <button
+            className="collapsed-tab collapsed-tab-left"
+            onClick={() => {
+              setIsMapFocusMode(false);
+              setIsDesignerPanelCollapsed(false);
+            }}
+          >
+            <ChevronsRight size={16} /> Show Designer
+          </button>
+        ) : null}
+
+        {showDesignerPanel ? (
         <aside className="panel input-panel">
           <div className="panel-heading">
             <div className="icon-box teal">
@@ -1890,6 +1989,9 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
               <h2>Design a Learning Experience</h2>
               <p>Set the audience, phase, and learning range.</p>
             </div>
+            <button className="panel-collapse-button" onClick={() => setIsDesignerPanelCollapsed(true)}>
+              <ChevronsLeft size={15} /> Hide Designer Panel
+            </button>
           </div>
 
           <div className="form-stack">
@@ -1947,7 +2049,7 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
               onUseInModule={addCorpusItemToModule}
               onGenerateMasteryPath={generateMasteryPathFromCorpus}
             />
-            <button className="primary-button full-width" onClick={generatePath}>
+            <button className="primary-button full-width generate-button" onClick={generatePath}>
               <Route size={18} /> Generate Learning Path
             </button>
           </div>
@@ -1965,6 +2067,15 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
         </aside>
         ) : null}
 
+        {showDesignerPanel ? (
+          <div
+            className="pane-resizer pane-resizer-left"
+            role="separator"
+            aria-label="Resize designer panel"
+            onMouseDown={(event) => startPaneResize("left", event)}
+          />
+        ) : null}
+
         <section className="panel map-panel">
           <div className="map-header">
             <div>
@@ -1976,14 +2087,22 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
                 This continuum is informed by Webb's Depth of Knowledge and Hess's Cognitive Rigor Matrix, but adapted for applied museum learning.
               </p>
             </div>
-            <div className="legend">
-              {learningLocusLevels.map((level) => (
-                <span className="chip" key={level.key}>
-                  {level.symbol} {level.label}
-                </span>
-              ))}
+            <div className="map-actions">
+              <button className="secondary-button map-focus-button" onClick={isMapFocusMode ? exitMapFocusMode : enterMapFocusMode}>
+                {isMapFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                {isMapFocusMode ? "Exit Focus Mode" : "Map Focus Mode"}
+              </button>
+              <div className="legend">
+                {learningLocusLevels.map((level) => (
+                  <span className="chip" key={level.key}>
+                    {level.symbol} {level.label}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
+
+          <PathNavigator nodes={nodes} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} />
 
           <div className="map-scroll">
             <div className="learning-grid">
@@ -2037,6 +2156,16 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           </div>
         </section>
 
+        {showSlidePanel ? (
+          <div
+            className="pane-resizer pane-resizer-right"
+            role="separator"
+            aria-label="Resize slide preview panel"
+            onMouseDown={(event) => startPaneResize("right", event)}
+          />
+        ) : null}
+
+        {showSlidePanel ? (
         <aside className="panel slide-panel">
           <div className="slide-panel-heading">
             <div>
@@ -2044,6 +2173,9 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
               <p>Preview generated from the selected node.</p>
             </div>
             <BookOpen className="heading-icon" size={24} />
+            <button className="panel-collapse-button" onClick={() => setIsSlidePanelCollapsed(true)}>
+              Hide Slide Preview <ChevronsRight size={15} />
+            </button>
           </div>
 
           <article className="slide-card">
@@ -2150,7 +2282,7 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           </article>
 
           {isDesignerMode ? (
-          <div className="button-grid">
+          <div className="button-grid slide-action-bar">
             <button className="secondary-button" onClick={copySlide}>
               <Clipboard size={17} /> Export slide copy
             </button>
@@ -2160,6 +2292,17 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           </div>
           ) : null}
         </aside>
+        ) : (
+          <button
+            className="collapsed-tab collapsed-tab-right"
+            onClick={() => {
+              setIsMapFocusMode(false);
+              setIsSlidePanelCollapsed(false);
+            }}
+          >
+            Show Slide <ChevronsLeft size={16} />
+          </button>
+        )}
       </section>
 
       <footer className="app-footer">
