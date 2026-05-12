@@ -1,9 +1,10 @@
 export default function ModeToggle({ mode, setMode }) {
   const isDesigner = mode === "designer";
+  const modeLabel = isDesigner ? "Curriculum Designer" : "Learner";
 
   return (
     <div className="mode-toggle">
-      <div className="mode-toggle-label">Current Mode</div>
+      <div className="mode-toggle-label">Mode: {modeLabel}</div>
       <div className="mode-toggle-buttons">
         <button
           type="button"

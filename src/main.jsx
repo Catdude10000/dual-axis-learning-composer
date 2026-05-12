@@ -1490,8 +1490,9 @@ function AdaptiveSubModulePanel({ subModule }) {
       <div className="adaptive-heading">
         <div>
           <div className="section-label">
-            <Sparkles size={16} /> AI-Generated Mastery Path
+            <Sparkles size={16} /> Adaptive Sub-Module
           </div>
+          <p className="adaptive-kicker">AI-Generated Mastery Path</p>
           <h4>{subModule.targetConcept}</h4>
         </div>
         <span className="chip">{subModule.screens.length} screens</span>
@@ -1978,7 +1979,7 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
             <div className="legend">
               {learningLocusLevels.map((level) => (
                 <span className="chip" key={level.key}>
-                  {level.symbol} {level.shortLabel}
+                  {level.symbol} {level.label}
                 </span>
               ))}
             </div>
@@ -2011,7 +2012,7 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
                               <span className="node-symbol">{locus.symbol}</span>
                               <span>
                                 {node.title}
-                                <small className="node-locus">{locus.shortLabel}</small>
+                                <small className="node-locus">{locus.label}</small>
                                 <small className={`node-status status-${screenStatuses[node.id] ?? "not_started"}`}>
                                   {masteryStatusLabels[screenStatuses[node.id] ?? "not_started"]}
                                 </small>

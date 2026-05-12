@@ -1235,6 +1235,15 @@ h1 {
   line-height: 1.55;
 }
 
+.adaptive-kicker {
+  margin: -5px 0 5px;
+  color: var(--teal);
+  font-size: 0.74rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .mini-axis-frame {
   margin-top: 14px;
 }
