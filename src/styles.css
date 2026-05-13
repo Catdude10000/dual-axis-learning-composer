@@ -1753,55 +1753,41 @@ h1 {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 22px;
-  --course-image: linear-gradient(135deg, rgba(15, 118, 110, 0.58), rgba(183, 121, 31, 0.36));
   background:
-    linear-gradient(135deg, rgba(42, 36, 30, 0.1), rgba(15, 118, 110, 0.24)),
-    radial-gradient(circle at 76% 24%, rgba(255, 240, 189, 0.54), transparent 20rem),
-    linear-gradient(115deg, rgba(15, 118, 110, 0.42), rgba(183, 121, 31, 0.24)),
-    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 13px),
-    repeating-radial-gradient(circle at 24% 22%, rgba(42, 36, 30, 0.32) 0 1.2px, transparent 1.6px 8px),
-    #d8f1ec;
+    linear-gradient(135deg, rgba(42, 36, 30, 0.12), rgba(15, 118, 110, 0.14)),
+    #fffaf0;
   box-shadow: var(--shadow-soft);
   isolation: isolate;
 }
 
-.course-visual.halftone-overlay {
+.course-visual.actual-image-overlay {
   display: flex;
   align-items: flex-end;
   padding: clamp(16px, 3vw, 30px);
-  background:
-    linear-gradient(90deg, rgba(42, 36, 30, 0.24), rgba(42, 36, 30, 0.04) 55%),
-    var(--course-image),
-    linear-gradient(135deg, rgba(15, 118, 110, 0.58), rgba(183, 121, 31, 0.34)),
-    repeating-linear-gradient(110deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 12px),
-    repeating-radial-gradient(circle at 22% 24%, rgba(42, 36, 30, 0.3) 0 1px, transparent 1.4px 7px),
-    #d8f1ec;
-  background-blend-mode: multiply, normal, color, soft-light, multiply, normal;
-  background-position: center;
-  background-size: cover;
 }
 
-.course-visual.halftone-overlay::before {
+.course-visual.actual-image-overlay::before {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(42, 36, 30, 0.68), rgba(42, 36, 30, 0.26) 46%, rgba(255, 253, 248, 0.06)),
-    radial-gradient(circle at 78% 22%, rgba(255, 253, 248, 0.24), transparent 24rem),
-    radial-gradient(circle at 50% 50%, transparent 40%, rgba(42, 36, 30, 0.46) 100%),
-    repeating-radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.28) 0 1px, transparent 1.4px 6px);
+    linear-gradient(90deg, rgba(42, 36, 30, 0.72), rgba(42, 36, 30, 0.34) 48%, rgba(255, 253, 248, 0.04)),
+    radial-gradient(circle at 50% 50%, transparent 42%, rgba(42, 36, 30, 0.46) 100%);
   content: "";
   z-index: 1;
 }
 
-.course-visual.halftone-overlay::after {
+.course-visual.actual-image-overlay::after,
+.course-image-frame::after {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.22), rgba(183, 121, 31, 0.16)),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 5px);
-  backdrop-filter: saturate(1.08) contrast(1.04);
+    linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(183, 121, 31, 0.14)),
+    radial-gradient(circle at 78% 18%, rgba(255, 253, 248, 0.18), transparent 22rem),
+    repeating-radial-gradient(circle at 22% 26%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.5px 7px);
+  mix-blend-mode: soft-light;
   content: "";
   z-index: 1;
+  pointer-events: none;
 }
 
 .course-visual-text-panel {
@@ -1816,7 +1802,7 @@ h1 {
   backdrop-filter: blur(10px);
 }
 
-.course-visual.halftone-overlay .course-visual-text-panel {
+.course-visual.actual-image-overlay .course-visual-text-panel {
   background: rgba(255, 253, 248, 0.92);
 }
 
@@ -1863,45 +1849,47 @@ h1 {
   overflow: hidden;
   border-radius: 18px;
   background:
-    linear-gradient(135deg, rgba(42, 36, 30, 0.08), rgba(15, 118, 110, 0.18)),
-    var(--course-image),
-    linear-gradient(135deg, rgba(15, 118, 110, 0.58), rgba(183, 121, 31, 0.34)),
-    repeating-radial-gradient(circle at 30% 24%, rgba(42, 36, 30, 0.28) 0 1.1px, transparent 1.4px 8px),
-    #d8f1ec;
-  background-blend-mode: multiply, normal, color, multiply, normal;
-  background-position: center;
-  background-size: cover;
+    linear-gradient(135deg, rgba(42, 36, 30, 0.12), rgba(15, 118, 110, 0.16)),
+    #fffaf0;
 }
 
 .course-image-frame::before {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(circle at 76% 20%, rgba(255, 253, 248, 0.22), transparent 18rem),
-    radial-gradient(circle at 50% 50%, transparent 45%, rgba(42, 36, 30, 0.36) 100%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0 2px, transparent 2px 12px);
+  background: radial-gradient(circle at 50% 50%, transparent 45%, rgba(42, 36, 30, 0.34) 100%);
   content: "";
+  z-index: 1;
+  pointer-events: none;
 }
 
-.course-image-fallback {
-  display: grid;
-  position: relative;
-  z-index: 1;
-  min-height: inherit;
-  align-items: end;
-  justify-items: start;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg, transparent 0 42%, rgba(42, 36, 30, 0.66)),
-    linear-gradient(135deg, rgba(255, 253, 248, 0.18), transparent 42%);
-  color: #fffaf0;
-  padding: 18px;
-  font-size: 0.82rem;
+.course-image-img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.92) contrast(1.08) sepia(0.16);
+  transform: scale(1.015);
+}
+
+.course-image-caption-chip {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+  max-width: min(420px, calc(100% - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: 0 10px 24px rgba(42, 36, 30, 0.18);
+  color: #2a241e;
+  padding: 8px 11px;
+  font-size: 0.74rem;
   font-weight: 850;
   letter-spacing: 0.08em;
-  text-align: left;
-  text-shadow: 0 2px 10px rgba(42, 36, 30, 0.72);
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
@@ -1939,24 +1927,117 @@ h1 {
   padding: 20px;
 }
 
-.course-visual.generated-fallback {
-  background:
-    linear-gradient(120deg, rgba(42, 36, 30, 0.46), rgba(15, 118, 110, 0.22)),
-    radial-gradient(circle at 25% 28%, rgba(255, 240, 189, 0.68), transparent 12rem),
-    linear-gradient(90deg, rgba(255, 253, 248, 0.16) 0 12%, transparent 12% 18%, rgba(255, 253, 248, 0.13) 18% 30%, transparent 30%),
-    repeating-radial-gradient(circle at 74% 35%, rgba(42, 36, 30, 0.32) 0 1.2px, transparent 1.6px 8px),
-    #d8f1ec;
+.course-visual.generated-placeholder-mode,
+.course-visual.text-only {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(280px, 0.9fr);
+  gap: 18px;
+  align-items: stretch;
+  padding: 18px;
+  background: #fffaf0;
 }
 
-.course-visual.generated-fallback::before {
+.generated-visual-placeholder {
+  position: relative;
+  min-height: clamp(330px, 34vw, 510px);
+  overflow: hidden;
+  border: 1px solid rgba(42, 36, 30, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(42, 36, 30, 0.74), rgba(15, 118, 110, 0.4)),
+    linear-gradient(90deg, rgba(255, 253, 248, 0.18) 0 13%, transparent 13% 18%, rgba(255, 253, 248, 0.14) 18% 31%, transparent 31%),
+    radial-gradient(circle at 72% 28%, rgba(255, 240, 189, 0.42), transparent 13rem),
+    #2a241e;
+}
+
+.generated-visual-placeholder::before {
   position: absolute;
   inset: 18px;
   border: 1px solid rgba(255, 253, 248, 0.45);
   border-radius: 18px;
   background:
-    linear-gradient(90deg, rgba(255, 253, 248, 0.18) 0 18%, transparent 18%),
-    linear-gradient(0deg, rgba(42, 36, 30, 0.12) 0 2px, transparent 2px 28px);
+    linear-gradient(90deg, rgba(255, 253, 248, 0.12) 0 16%, transparent 16%),
+    linear-gradient(0deg, rgba(255, 253, 248, 0.08) 0 2px, transparent 2px 28px);
   content: "";
+}
+
+.generated-visual-placeholder::after {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-radial-gradient(circle at 22% 24%, rgba(255, 255, 255, 0.2) 0 1px, transparent 1.5px 7px),
+    radial-gradient(circle at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.36) 100%);
+  content: "";
+}
+
+.generated-poster-mark,
+.generated-visual-main,
+.generated-prompt-preview {
+  position: relative;
+  z-index: 1;
+}
+
+.generated-poster-mark {
+  display: inline-flex;
+  margin: 22px;
+  border: 1px solid rgba(255, 253, 248, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.88);
+  color: #2a241e;
+  padding: 7px 10px;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.generated-visual-main {
+  width: min(560px, calc(100% - 44px));
+  margin: 38px 22px 0;
+  color: #fffaf0;
+}
+
+.generated-visual-main span,
+.generated-prompt-preview strong {
+  display: block;
+  color: #fff0bd;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.generated-visual-main h3 {
+  margin-top: 8px;
+  font-size: clamp(1.5rem, 3vw, 2.55rem);
+  line-height: 1.05;
+}
+
+.generated-visual-main p {
+  margin-top: 10px;
+  color: rgba(255, 250, 240, 0.88);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.generated-prompt-preview {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  border: 1px solid rgba(255, 253, 248, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.12);
+  color: rgba(255, 250, 240, 0.86);
+  padding: 11px 12px;
+  backdrop-filter: blur(8px);
+}
+
+.generated-prompt-preview span {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 .course-content {
@@ -2396,6 +2477,8 @@ h1 {
   }
 
   .course-visual.image-beside-text,
+  .course-visual.generated-placeholder-mode,
+  .course-visual.text-only,
   .course-content {
     grid-template-columns: 1fr;
   }

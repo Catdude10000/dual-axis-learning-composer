@@ -113,9 +113,9 @@ const movementOptions = ["Yes, adaptive movement encouraged", "Limited movement 
 const slideCountOptions = ["1", "2", "3", "4", "5", "Custom"];
 const navigatorDockOptions = ["below map", "top-right", "bottom-right"];
 const learnerVisualStyleOptions = [
+  "Actual image with overlay",
   "Image beside text",
-  "Halftone background with text overlay",
-  "Image only with caption",
+  "Generated placeholder",
   "Text only"
 ];
 const slideTypes = [
@@ -169,20 +169,21 @@ const learningLocusLevels = [
 const learningLocusOptions = ["Auto-evaluate", ...learningLocusLevels.map((level) => level.label)];
 const learningLocusWeightingOptions = ["Balanced", "Transfer-focused", "Mastery-focused", "Relationship-focused"];
 
-// Add real image files at /public/images using these filenames. The course view
-// gracefully falls back to styled halftone panels when a file is not present.
+// Add actual uploaded Black Panther Party Museum photos at /public/images/
+// using these filenames. If a file is missing, Course View detects the failed
+// load and renders an intentional generated-image-style placeholder instead.
 const museumImages = [
   {
     id: "research-room",
     title: "Dr. Huey P. Newton Research Room",
-    themes: ["research", "theory", "praxis", "archives", "archive", "Huey Newton", "study"],
+    themes: ["research", "theory", "praxis", "archives", "archive", "Huey Newton", "study", "sources", "bibliography"],
     src: "/images/research-room.jpg"
   },
   {
-    id: "free-breakfast",
+    id: "free-breakfast-program",
     title: "People's Free Food Program",
-    themes: ["breakfast", "food", "survival", "survival programs", "community care", "mutual aid"],
-    src: "/images/free-breakfast.jpg"
+    themes: ["breakfast", "food", "feeding", "children", "survival", "survival programs", "community care", "mutual aid"],
+    src: "/images/free-breakfast-program.jpg"
   },
   {
     id: "ten-point-program",
@@ -191,28 +192,40 @@ const museumImages = [
     src: "/images/ten-point-program.jpg"
   },
   {
-    id: "community-health",
-    title: "Community Health and Medical Care",
-    themes: ["medical care", "health", "clinic", "sickle-cell", "care", "survival"],
-    src: "/images/community-health.jpg"
+    id: "huey-newton-theory-praxis",
+    title: "Huey Newton: Theory and Praxis",
+    themes: ["Huey Newton", "theory", "praxis", "political education", "research", "archive"],
+    src: "/images/huey-newton-theory-praxis.jpg"
+  },
+  {
+    id: "safe-program",
+    title: "S.A.F.E. Program",
+    themes: ["SAFE", "seniors", "safety", "elder care", "community safety", "self-determination"],
+    src: "/images/safe-program.jpg"
+  },
+  {
+    id: "oscar-grant-phone-booth",
+    title: "Oscar Grant Phone Booth",
+    themes: ["Oscar Grant", "police violence", "memorial", "phone booth", "public memory", "justice"],
+    src: "/images/oscar-grant-phone-booth.jpg"
+  },
+  {
+    id: "black-panther-books-table",
+    title: "Black Panther Books and Research Table",
+    themes: ["books", "research", "sources", "bibliography", "reading", "archives", "education"],
+    src: "/images/black-panther-books-table.jpg"
+  },
+  {
+    id: "medical-care-display",
+    title: "Medical Care Display",
+    themes: ["medical care", "health", "clinic", "doctor", "sickle-cell", "care", "survival"],
+    src: "/images/medical-care-display.jpg"
   },
   {
     id: "newspaper-media",
     title: "Movement Newspaper and Media",
-    themes: ["newspaper", "media", "visual rhetoric", "communication", "archives", "education"],
+    themes: ["newspaper", "media", "communication", "visual rhetoric", "publication", "headline", "archives", "education"],
     src: "/images/newspaper-media.jpg"
-  },
-  {
-    id: "civic-education",
-    title: "Civic Education and Community Learning",
-    themes: ["education", "community learning", "discussion", "reflection", "museum", "public memory"],
-    src: "/images/civic-education.jpg"
-  },
-  {
-    id: "community-safety",
-    title: "Community Safety and Public Responsibility",
-    themes: ["police violence", "safety", "surveillance", "elder care", "self-determination"],
-    src: "/images/community-safety.jpg"
   }
 ];
 
@@ -227,13 +240,15 @@ const visualKeywordGroups = {
 };
 
 const imageKeywordAliases = {
-  "free-breakfast": visualKeywordGroups.breakfast,
+  "free-breakfast-program": visualKeywordGroups.breakfast,
   "research-room": visualKeywordGroups.research,
+  "huey-newton-theory-praxis": visualKeywordGroups.research,
   "ten-point-program": visualKeywordGroups.platform,
-  "community-health": visualKeywordGroups.health,
+  "medical-care-display": visualKeywordGroups.health,
   "newspaper-media": visualKeywordGroups.media,
-  "civic-education": visualKeywordGroups.education,
-  "community-safety": visualKeywordGroups.safety
+  "black-panther-books-table": [...visualKeywordGroups.research, ...visualKeywordGroups.education],
+  "safe-program": visualKeywordGroups.safety,
+  "oscar-grant-phone-booth": visualKeywordGroups.safety
 };
 
 const phaseArc = [
@@ -861,15 +876,8 @@ function generateFeedbackForSlideType(context) {
 }
 
 function generateImagePrompt(context) {
-  const styleNotes = [
-    "classroom-safe",
-    "museum-appropriate",
-    "historically respectful",
-    "readable foreground/background balance"
-  ];
-  if (Number(context.halftonePromptPercent) > 0) styleNotes.push("halftone-inspired educational print texture");
   const sourceCue = context.corpusFocus ? ` Reference the learning source focus: ${context.corpusFocus}.` : "";
-  return `Create a ${styleNotes.join(", ")} image prompt for a learning slide about "${context.nodeTitle}" within "${context.theme}". Show the idea through objects, spaces, documents, or community-learning context rather than real person likenesses.${sourceCue} Leave clear visual space for slide text and make the composition suitable for ${context.audience.toLowerCase()} learners.`;
+  return `Create a classroom-safe, historically respectful educational image inspired by Black Panther Party Museum learning about "${context.nodeTitle}" within "${context.theme}". Emphasize community care, political education, source-based interpretation, and museum objects or spaces rather than real person likenesses.${sourceCue} Use a warm documentary style with subtle halftone texture and clear space for overlay text for ${context.audience.toLowerCase()} learners.`;
 }
 
 function generateSlideContent(context) {
@@ -1045,15 +1053,15 @@ function selectMuseumImage({ visualSettings, form, selectedNode, slide, selected
     const score = keywords.reduce((total, keyword) => total + getTokenMatchScore(searchText, keyword), 0);
     const phase = Number(selectedNode.phase);
     const phaseBoost =
-      (phase <= 2 && image.id === "free-breakfast") ||
+      (phase <= 2 && image.id === "free-breakfast-program") ||
       (phase === 3 && image.id === "newspaper-media") ||
-      (phase === 4 && image.id === "community-safety") ||
-      (phase >= 5 && image.id === "civic-education")
+      (phase === 4 && (image.id === "safe-program" || image.id === "oscar-grant-phone-booth")) ||
+      (phase >= 5 && (image.id === "black-panther-books-table" || image.id === "huey-newton-theory-praxis"))
         ? 2
         : 0;
     const slideBoost =
       slide.slideType === "discussion" || slide.slideType === "reflection"
-        ? image.id === "civic-education"
+        ? image.id === "black-panther-books-table"
           ? 2
           : 0
         : 0;
@@ -1066,9 +1074,10 @@ function selectMuseumImage({ visualSettings, form, selectedNode, slide, selected
 function getCourseVisual({ visualSettings, form, selectedNode, slide, selectedCorpusItems }) {
   const image = selectMuseumImage({ visualSettings, form, selectedNode, slide, selectedCorpusItems });
   const selectedSpecificImage = visualSettings.selectedImageId && !["auto", "text-only"].includes(visualSettings.selectedImageId);
+  const style = visualSettings.visualStyle === "Halftone background with text overlay" ? "Actual image with overlay" : visualSettings.visualStyle;
   return {
     image,
-    style: visualSettings.visualStyle,
+    style,
     caption: visualSettings.caption || image?.title || selectedNode.theme,
     imagePrompt: visualSettings.imagePrompt || slide.prompt,
     sourceLabel: image
@@ -2503,11 +2512,37 @@ function LearnerViewToggle({ learnerView, onChange }) {
   );
 }
 
+function GeneratedVisualPlaceholder({ slide, visual }) {
+  return (
+    <div className="generated-visual-placeholder">
+      <div className="generated-poster-mark">BPP Museum Learning</div>
+      <div className="generated-visual-main">
+        <span>Generated Visual Placeholder</span>
+        <h3>{visual.caption || slide.title}</h3>
+        <p>
+          This area is reserved for a classroom-safe, historically respectful image connected to this slide's Black Panther Party Museum learning topic.
+        </p>
+      </div>
+      <div className="generated-prompt-preview">
+        <strong>Image prompt preview</strong>
+        <span>{visual.imagePrompt}</span>
+      </div>
+    </div>
+  );
+}
+
 function CourseVisual({ slide, selectedNode, visual }) {
-  const visualStyle = visual.image ? { "--course-image": `url("${visual.image.src}")` } : {};
-  if (visual.style === "Text only" || !visual.image) {
+  const [failedImageSrc, setFailedImageSrc] = React.useState("");
+  React.useEffect(() => {
+    setFailedImageSrc("");
+  }, [visual.image?.src]);
+  const imageAvailable = !!visual.image && failedImageSrc !== visual.image.src;
+  const showGeneratedPlaceholder = visual.style === "Generated placeholder" || !imageAvailable;
+
+  if (visual.style === "Text only") {
     return (
-      <div className="course-visual text-only generated-fallback">
+      <div className="course-visual text-only">
+        <GeneratedVisualPlaceholder slide={slide} visual={visual} />
         <div className="course-visual-text-panel">
           <span>{slideTypeLabels[slide.slideType]}</span>
           <h3>{slide.title}</h3>
@@ -2517,11 +2552,25 @@ function CourseVisual({ slide, selectedNode, visual }) {
     );
   }
 
+  if (showGeneratedPlaceholder) {
+    return (
+      <div className="course-visual generated-placeholder-mode">
+        <GeneratedVisualPlaceholder slide={slide} visual={visual} />
+        <div className="course-visual-text-panel">
+          <span>{visual.caption}</span>
+          <h3>{slide.title}</h3>
+          <p>{slide.concept}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (visual.style === "Image beside text") {
     return (
       <div className="course-visual image-beside-text">
-        <div className="course-image-frame" style={visualStyle} aria-label={visual.image.title}>
-          <div className="course-image-fallback">{visual.image.title}</div>
+        <div className="course-image-frame" aria-label={visual.image.title}>
+          <img className="course-image-img" src={visual.image.src} alt={visual.image.title} onError={() => setFailedImageSrc(visual.image.src)} />
+          <div className="course-image-caption-chip">{visual.image.title}</div>
         </div>
         <div className="course-visual-text-panel">
           <span>{visual.caption}</span>
@@ -2532,19 +2581,9 @@ function CourseVisual({ slide, selectedNode, visual }) {
     );
   }
 
-  if (visual.style === "Image only with caption") {
-    return (
-      <figure className="course-visual image-caption">
-        <div className="course-image-frame" style={visualStyle} aria-label={visual.image.title}>
-          <div className="course-image-fallback">{visual.image.title}</div>
-        </div>
-        <figcaption>{visual.caption}</figcaption>
-      </figure>
-    );
-  }
-
   return (
-    <div className="course-visual halftone-overlay" style={visualStyle}>
+    <div className="course-visual actual-image-overlay">
+      <img className="course-image-img" src={visual.image.src} alt={visual.image.title} onError={() => setFailedImageSrc(visual.image.src)} />
       <div className="course-visual-text-panel">
         <span>{visual.caption}</span>
         <h3>{slide.title}</h3>
@@ -2823,7 +2862,7 @@ function App() {
   const [dynamicGenerationEnabled, setDynamicGenerationEnabled] = React.useState(true);
   const [learnerVisualSettings, setLearnerVisualSettings] = React.useState({
     autoPopulate: true,
-    visualStyle: "Halftone background with text overlay",
+    visualStyle: "Actual image with overlay",
     selectedImageId: "auto",
     caption: "",
     imagePrompt: ""
