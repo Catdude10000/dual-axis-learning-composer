@@ -15,6 +15,8 @@ import {
   ArrowUpRight,
   ChevronsLeft,
   ChevronsRight,
+  ChevronDown,
+  ChevronRight,
   Maximize2,
   Minimize2
 } from "lucide-react";
@@ -106,6 +108,18 @@ const accessibilityLevels = ["Basic", "Guided", "General", "Specific", "Referent
 const cognitiveLevelOptions = cognitiveDepthLevels.map((level) => level.label);
 const masteryCognitiveTargets = ["adaptive", ...cognitiveLevelOptions];
 const movementOptions = ["Yes, adaptive movement encouraged", "Limited movement only", "No, keep sequence mostly upward"];
+const slideCountOptions = ["1", "2", "3", "4", "5", "Custom"];
+const navigatorDockOptions = ["below map", "top-right", "bottom-right"];
+const slideTypes = [
+  { value: "content", label: "Content" },
+  { value: "multiple_choice", label: "Multiple choice" },
+  { value: "true_false", label: "True / false" },
+  { value: "fill_blank", label: "Fill-in-the-blank" },
+  { value: "short_essay", label: "Short essay" },
+  { value: "reflection", label: "Reflection" },
+  { value: "discussion", label: "Discussion" }
+];
+const slideTypeLabels = Object.fromEntries(slideTypes.map((type) => [type.value, type.label]));
 const masteryStatusLabels = {
   not_started: "Not started",
   in_progress: "In progress",
@@ -634,6 +648,91 @@ function makeSlide(node, variantIndex) {
   };
 }
 
+function makeDefaultSlideSettings(node, slideIndex = 0) {
+  const basePrompt = `Respond to "${node.title}" using one specific detail from the learning slide.`;
+  const typeCycle = ["content", "multiple_choice", "true_false", "fill_blank", "short_essay", "reflection", "discussion"];
+  const slideType = slideIndex === 0 ? "content" : typeCycle[slideIndex % typeCycle.length];
+  return {
+    slideType,
+    multipleChoice: {
+      choices: [
+        "It connected a practical community need with civic learning.",
+        "It avoided public questions and focused only on private memory.",
+        "It removed the need to interpret historical evidence."
+      ],
+      correctIndex: 0,
+      feedback: "Good. This answer connects direct service, evidence, and civic meaning."
+    },
+    trueFalse: {
+      correctAnswer: "true",
+      feedback: "Right direction: the strongest answer should connect the activity to evidence and community meaning."
+    },
+    fillBlank: {
+      prompt: `${node.title} helps learners understand that ______ can become a form of public learning.`,
+      expectedAnswer: "community care, mutual aid, or direct service"
+    },
+    shortEssay: {
+      prompt: basePrompt,
+      criteria: "Uses evidence, explains civic meaning, and avoids oversimplifying historical context."
+    },
+    reflection: {
+      prompt: `What changed in your thinking after studying "${node.title}"?`,
+      partnerPrompt: "Share one changed assumption with a partner and compare the evidence that influenced each of you."
+    },
+    discussion: {
+      prompt: `What question should a museum educator ask to help visitors discuss "${node.title}" respectfully?`,
+      partnerPrompt: "In pairs, choose one discussion norm that would make this conversation more careful and historically grounded."
+    }
+  };
+}
+
+function getSlideKey(nodeId, slideIndex) {
+  return `${nodeId}::${slideIndex}`;
+}
+
+function normalizeSlideCountSetting(setting) {
+  const mode = setting?.mode ?? "2";
+  if (mode === "Custom") return clamp(Number(setting?.customCount) || 1, 1, 12);
+  return clamp(Number(mode) || 1, 1, 5);
+}
+
+function getPhaseSlideSetting(phaseSlideSettings, phase) {
+  return phaseSlideSettings[Number(phase)] ?? { mode: "2", customCount: 2 };
+}
+
+function getSlideSettings(slideSettingsByKey, node, slideIndex) {
+  return slideSettingsByKey[getSlideKey(node.id, slideIndex)] ?? makeDefaultSlideSettings(node, slideIndex);
+}
+
+function makeLearningSlide(node, variantIndex, slideIndex = 0, slideSettings) {
+  const baseSlide = makeSlide(node, variantIndex + slideIndex);
+  const settings = slideSettings ?? makeDefaultSlideSettings(node, slideIndex);
+  const ordinal = slideIndex + 1;
+  const titleSuffix = ordinal > 1 ? `: Slide ${ordinal}` : "";
+  return {
+    ...baseSlide,
+    title: `${baseSlide.title}${titleSuffix}`,
+    concept:
+      ordinal > 1
+        ? `${baseSlide.concept} This slide extends the module with a focused ${slideTypeLabels[settings.slideType].toLowerCase()} activity.`
+        : baseSlide.concept,
+    task: settings.slideType === "content" ? baseSlide.task : getInteractivePrompt(settings, baseSlide.task),
+    slideIndex,
+    slideType: settings.slideType,
+    interaction: settings
+  };
+}
+
+function getInteractivePrompt(settings, fallbackTask) {
+  if (settings.slideType === "multiple_choice") return "Choose the strongest response, then review the feedback.";
+  if (settings.slideType === "true_false") return "Decide whether the statement is true or false, then review the feedback.";
+  if (settings.slideType === "fill_blank") return settings.fillBlank.prompt;
+  if (settings.slideType === "short_essay") return settings.shortEssay.prompt;
+  if (settings.slideType === "reflection") return settings.reflection.prompt;
+  if (settings.slideType === "discussion") return settings.discussion.prompt;
+  return fallbackTask;
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -1127,11 +1226,15 @@ function SelectField({ label, value, onChange, options }) {
     <label className="field-label">
       <span>{label}</span>
       <select className="field-control" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+        {options.map((option) => {
+          const optionValue = typeof option === "string" ? option : option.value;
+          const optionLabel = typeof option === "string" ? option : option.label;
+          return (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
           </option>
-        ))}
+          );
+        })}
       </select>
     </label>
   );
@@ -1143,6 +1246,21 @@ function CheckboxField({ label, checked, onChange }) {
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       <span>{label}</span>
     </label>
+  );
+}
+
+function AccordionSection({ id, title, icon, open, onToggle, children }) {
+  return (
+    <section className={`accordion-section${open ? " open" : ""}`}>
+      <button className="accordion-trigger" type="button" onClick={() => onToggle(id)} aria-expanded={open}>
+        <span>
+          {icon}
+          {title}
+        </span>
+        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+      </button>
+      {open ? <div className="accordion-content">{children}</div> : null}
+    </section>
   );
 }
 
@@ -1336,6 +1454,218 @@ function LearningLocusSettings({ settings, onChange, selectedNode }) {
         <strong>{locus.label}</strong>
         <span>{selectedNode?.learningLocusRationale ?? locus.description}</span>
       </div>
+    </div>
+  );
+}
+
+function SlideStepper({ slideCount, selectedSlideIndex, onSelectSlide, slideSettingsByKey, selectedNode }) {
+  return (
+    <div className="slide-stepper" aria-label="Learning slide list">
+      {Array.from({ length: slideCount }, (_, index) => {
+        const settings = getSlideSettings(slideSettingsByKey, selectedNode, index);
+        return (
+          <button
+            type="button"
+            className={`slide-step${index === selectedSlideIndex ? " active" : ""}`}
+            key={index}
+            onClick={() => onSelectSlide(index)}
+          >
+            <span>Slide {index + 1}</span>
+            <small>{slideTypeLabels[settings.slideType]}</small>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SlideSettingsPanel({
+  selectedNode,
+  selectedSlideIndex,
+  slideCountSetting,
+  slideSettings,
+  onSlideCountChange,
+  onSelectedSlideChange,
+  onSlideSettingsChange
+}) {
+  function updateSlideSetting(path, value) {
+    const [section, key] = path;
+    if (key) {
+      onSlideSettingsChange({
+        ...slideSettings,
+        [section]: {
+          ...slideSettings[section],
+          [key]: value
+        }
+      });
+      return;
+    }
+    onSlideSettingsChange({ ...slideSettings, [section]: value });
+  }
+
+  function updateChoice(index, value) {
+    const choices = [...slideSettings.multipleChoice.choices];
+    choices[index] = value;
+    updateSlideSetting(["multipleChoice", "choices"], choices);
+  }
+
+  function updateChoiceCount(nextCount) {
+    const count = clamp(Number(nextCount) || 3, 3, 5);
+    const currentChoices = slideSettings.multipleChoice.choices;
+    const choices = Array.from({ length: count }, (_, index) => currentChoices[index] ?? `Choice ${index + 1}`);
+    onSlideSettingsChange({
+      ...slideSettings,
+      multipleChoice: {
+        ...slideSettings.multipleChoice,
+        choices,
+        correctIndex: clamp(slideSettings.multipleChoice.correctIndex, 0, count - 1)
+      }
+    });
+  }
+
+  return (
+    <div className="slide-settings">
+      <div className="section-label">
+        <BookOpen size={17} /> Slide Settings
+      </div>
+      <div className="form-stack compact">
+        <div className="two-column-fields">
+          <SelectField
+            label="Slides per phase"
+            value={slideCountSetting.mode}
+            onChange={(value) => onSlideCountChange({ ...slideCountSetting, mode: value })}
+            options={slideCountOptions}
+          />
+          {slideCountSetting.mode === "Custom" ? (
+            <label className="field-label">
+              <span>Custom slide count</span>
+              <input
+                className="field-control"
+                type="number"
+                min="1"
+                max="12"
+                value={slideCountSetting.customCount}
+                onChange={(event) => onSlideCountChange({ ...slideCountSetting, customCount: Number(event.target.value) })}
+              />
+            </label>
+          ) : null}
+        </div>
+        <SlideStepper
+          slideCount={normalizeSlideCountSetting(slideCountSetting)}
+          selectedSlideIndex={selectedSlideIndex}
+          onSelectSlide={onSelectedSlideChange}
+          slideSettingsByKey={{ [getSlideKey(selectedNode.id, selectedSlideIndex)]: slideSettings }}
+          selectedNode={selectedNode}
+        />
+        <SelectField
+          label={`Slide ${selectedSlideIndex + 1} type`}
+          value={slideSettings.slideType}
+          onChange={(value) => updateSlideSetting(["slideType"], value)}
+          options={slideTypes}
+        />
+        <SlideTypeEditor
+          settings={slideSettings}
+          onUpdate={updateSlideSetting}
+          onUpdateChoice={updateChoice}
+          onUpdateChoiceCount={updateChoiceCount}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SlideTypeEditor({ settings, onUpdate, onUpdateChoice, onUpdateChoiceCount }) {
+  if (settings.slideType === "content") {
+    return <p className="settings-hint">Content slides use the generated concept, why-it-matters text, quick task, and deeper-learning prompts.</p>;
+  }
+
+  if (settings.slideType === "multiple_choice") {
+    return (
+      <div className="interactive-editor">
+        <SelectField
+          label="Number of choices"
+          value={String(settings.multipleChoice.choices.length)}
+          onChange={onUpdateChoiceCount}
+          options={["3", "4", "5"]}
+        />
+        {settings.multipleChoice.choices.map((choice, index) => (
+          <label className="field-label" key={index}>
+            <span>Choice {index + 1}</span>
+            <input className="field-control" value={choice} onChange={(event) => onUpdateChoice(index, event.target.value)} />
+          </label>
+        ))}
+        <SelectField
+          label="Correct answer"
+          value={String(settings.multipleChoice.correctIndex)}
+          onChange={(value) => onUpdate(["multipleChoice", "correctIndex"], Number(value))}
+          options={settings.multipleChoice.choices.map((_, index) => String(index))}
+        />
+        <label className="field-label">
+          <span>Feedback text</span>
+          <textarea className="field-control textarea small-textarea" value={settings.multipleChoice.feedback} onChange={(event) => onUpdate(["multipleChoice", "feedback"], event.target.value)} />
+        </label>
+      </div>
+    );
+  }
+
+  if (settings.slideType === "true_false") {
+    return (
+      <div className="interactive-editor">
+        <SelectField
+          label="Correct answer"
+          value={settings.trueFalse.correctAnswer}
+          onChange={(value) => onUpdate(["trueFalse", "correctAnswer"], value)}
+          options={["true", "false"]}
+        />
+        <label className="field-label">
+          <span>Feedback text</span>
+          <textarea className="field-control textarea small-textarea" value={settings.trueFalse.feedback} onChange={(event) => onUpdate(["trueFalse", "feedback"], event.target.value)} />
+        </label>
+      </div>
+    );
+  }
+
+  if (settings.slideType === "fill_blank") {
+    return (
+      <div className="interactive-editor">
+        <label className="field-label">
+          <span>Blank prompt</span>
+          <textarea className="field-control textarea small-textarea" value={settings.fillBlank.prompt} onChange={(event) => onUpdate(["fillBlank", "prompt"], event.target.value)} />
+        </label>
+        <label className="field-label">
+          <span>Expected answer / keywords</span>
+          <input className="field-control" value={settings.fillBlank.expectedAnswer} onChange={(event) => onUpdate(["fillBlank", "expectedAnswer"], event.target.value)} />
+        </label>
+      </div>
+    );
+  }
+
+  if (settings.slideType === "short_essay") {
+    return (
+      <div className="interactive-editor">
+        <label className="field-label">
+          <span>Prompt</span>
+          <textarea className="field-control textarea small-textarea" value={settings.shortEssay.prompt} onChange={(event) => onUpdate(["shortEssay", "prompt"], event.target.value)} />
+        </label>
+        <label className="field-label">
+          <span>Suggested evaluation criteria</span>
+          <textarea className="field-control textarea small-textarea" value={settings.shortEssay.criteria} onChange={(event) => onUpdate(["shortEssay", "criteria"], event.target.value)} />
+        </label>
+      </div>
+    );
+  }
+
+  const section = settings.slideType === "discussion" ? "discussion" : "reflection";
+  return (
+    <div className="interactive-editor">
+      <label className="field-label">
+        <span>Prompt</span>
+        <textarea className="field-control textarea small-textarea" value={settings[section].prompt} onChange={(event) => onUpdate([section, "prompt"], event.target.value)} />
+      </label>
+      <label className="field-label">
+        <span>Optional partner-learning prompt</span>
+        <textarea className="field-control textarea small-textarea" value={settings[section].partnerPrompt} onChange={(event) => onUpdate([section, "partnerPrompt"], event.target.value)} />
+      </label>
     </div>
   );
 }
@@ -1541,13 +1871,29 @@ function AdaptiveSubModulePanel({ subModule }) {
   );
 }
 
-function PathNavigator({ nodes, selectedNodeId, onSelectNode }) {
+function PathNavigator({ nodes, selectedNodeId, onSelectNode, hidden, dockPosition, onDockPositionChange, onHiddenChange }) {
   const accessStep = 100 / Math.max(accessibilityLevels.length - 1, 1);
   const getY = (level) => 100 - ((clamp(level, 1, 6) - 1) / 5) * 100;
 
+  if (hidden) {
+    return (
+      <div className="path-navigator-hidden">
+        <button type="button" className="secondary-button" onClick={() => onHiddenChange(false)}>
+          Show Navigator
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="path-navigator" aria-label="Path Navigator">
-      <div className="path-navigator-title">Path Navigator</div>
+    <div className={`path-navigator dock-${dockPosition.replace(" ", "-")}`} aria-label="Path Navigator">
+      <div className="path-navigator-toolbar">
+        <div className="path-navigator-title">Path Navigator</div>
+        <button type="button" className="navigator-hide-button" onClick={() => onHiddenChange(true)}>
+          Hide Navigator
+        </button>
+      </div>
+      <SelectField label="Dock" value={dockPosition} onChange={onDockPositionChange} options={navigatorDockOptions} />
       <div className="path-navigator-field">
         {nodes.map((node, index) => {
           const locus = getLearningLocusFromComponent(node);
@@ -1569,6 +1915,117 @@ function PathNavigator({ nodes, selectedNodeId, onSelectNode }) {
         })}
       </div>
     </div>
+  );
+}
+
+function LearnerActivity({ slide }) {
+  const [selectedAnswer, setSelectedAnswer] = React.useState("");
+  const [textResponse, setTextResponse] = React.useState("");
+
+  React.useEffect(() => {
+    setSelectedAnswer("");
+    setTextResponse("");
+  }, [slide.title, slide.slideType]);
+
+  if (slide.slideType === "content") return null;
+
+  const settings = slide.interaction;
+  if (slide.slideType === "multiple_choice") {
+    const correctValue = String(settings.multipleChoice.correctIndex);
+    const hasAnswered = selectedAnswer !== "";
+    const isCorrect = selectedAnswer === correctValue;
+    return (
+      <section className="learner-activity">
+        <h4>Activity: Multiple Choice</h4>
+        <div className="answer-stack">
+          {settings.multipleChoice.choices.map((choice, index) => (
+            <button
+              type="button"
+              className={`answer-option${selectedAnswer === String(index) ? " selected" : ""}`}
+              key={`${choice}-${index}`}
+              onClick={() => setSelectedAnswer(String(index))}
+            >
+              {choice}
+            </button>
+          ))}
+        </div>
+        {hasAnswered ? (
+          <div className={`feedback-box ${isCorrect ? "correct" : "incorrect"}`}>
+            {isCorrect ? "Correct. " : "Try again. "}
+            {settings.multipleChoice.feedback}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (slide.slideType === "true_false") {
+    const hasAnswered = selectedAnswer !== "";
+    const isCorrect = selectedAnswer === settings.trueFalse.correctAnswer;
+    return (
+      <section className="learner-activity">
+        <h4>Activity: True / False</h4>
+        <p>{slide.concept}</p>
+        <div className="button-grid compact-buttons">
+          {["true", "false"].map((answer) => (
+            <button
+              type="button"
+              className={`answer-option${selectedAnswer === answer ? " selected" : ""}`}
+              key={answer}
+              onClick={() => setSelectedAnswer(answer)}
+            >
+              {answer === "true" ? "True" : "False"}
+            </button>
+          ))}
+        </div>
+        {hasAnswered ? (
+          <div className={`feedback-box ${isCorrect ? "correct" : "incorrect"}`}>
+            {isCorrect ? "Correct. " : "Not quite. "}
+            {settings.trueFalse.feedback}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (slide.slideType === "fill_blank") {
+    return (
+      <section className="learner-activity">
+        <h4>Activity: Fill in the Blank</h4>
+        <p>{settings.fillBlank.prompt}</p>
+        <input className="field-control" value={textResponse} onChange={(event) => setTextResponse(event.target.value)} placeholder="Type your response" />
+        {textResponse ? <div className="feedback-box">Expected keywords: {settings.fillBlank.expectedAnswer}</div> : null}
+      </section>
+    );
+  }
+
+  if (slide.slideType === "short_essay") {
+    return (
+      <section className="learner-activity">
+        <h4>Activity: Short Essay</h4>
+        <p>{settings.shortEssay.prompt}</p>
+        <textarea className="field-control textarea" value={textResponse} onChange={(event) => setTextResponse(event.target.value)} placeholder="Draft a short response" />
+        <div className="criteria-box">
+          <strong>Suggested criteria</strong>
+          <span>{settings.shortEssay.criteria}</span>
+        </div>
+      </section>
+    );
+  }
+
+  const section = slide.slideType === "discussion" ? settings.discussion : settings.reflection;
+  return (
+    <section className="learner-activity">
+      <h4>Activity: {slideTypeLabels[slide.slideType]}</h4>
+      <p>{section.prompt}</p>
+      <textarea className="field-control textarea small-textarea" value={textResponse} onChange={(event) => setTextResponse(event.target.value)} placeholder="Capture notes locally" />
+      {section.partnerPrompt ? (
+        <div className="micro-box partner">
+          <strong>Partner guidance</strong>
+          <span>{section.partnerPrompt}</span>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1729,8 +2186,33 @@ function App() {
     weightingPreference: "Balanced",
     selectedOverride: "Auto-evaluate"
   });
+  const [phaseSlideSettings, setPhaseSlideSettings] = React.useState({
+    1: { mode: "2", customCount: 2 },
+    2: { mode: "3", customCount: 3 },
+    3: { mode: "3", customCount: 3 },
+    4: { mode: "4", customCount: 4 },
+    5: { mode: "4", customCount: 4 },
+    6: { mode: "5", customCount: 5 }
+  });
+  const [selectedSlideByNode, setSelectedSlideByNode] = React.useState({});
+  const [slideSettingsByKey, setSlideSettingsByKey] = React.useState({});
+  const [isNavigatorHidden, setIsNavigatorHidden] = React.useState(false);
+  const [navigatorDockPosition, setNavigatorDockPosition] = React.useState("below map");
+  const [openDesignerSections, setOpenDesignerSections] = React.useState({
+    experience: true,
+    axis: true,
+    locus: false,
+    mastery: false,
+    slides: true,
+    corpus: false,
+    phase: false
+  });
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
-  const slide = makeSlide(selectedNode, variantIndex);
+  const selectedPhaseSlideSetting = getPhaseSlideSetting(phaseSlideSettings, selectedNode.phase);
+  const selectedSlideCount = normalizeSlideCountSetting(selectedPhaseSlideSetting);
+  const selectedSlideIndex = clamp(selectedSlideByNode[selectedNode.id] ?? 0, 0, selectedSlideCount - 1);
+  const selectedSlideSettings = getSlideSettings(slideSettingsByKey, selectedNode, selectedSlideIndex);
+  const slide = makeLearningSlide(selectedNode, variantIndex, selectedSlideIndex, selectedSlideSettings);
   const learningScreen = makeLearningScreen(selectedNode, slide, screenStatuses[selectedNode.id] ?? "not_started");
   const isDesignerMode = mode === "designer";
   const isLearnerMode = mode === "learner";
@@ -1750,6 +2232,31 @@ function App() {
 
   function updateForm(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleDesignerSection(sectionId) {
+    setOpenDesignerSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
+  }
+
+  function updatePhaseSlideSetting(nextSetting) {
+    const phase = Number(selectedNode.phase);
+    const nextCount = normalizeSlideCountSetting(nextSetting);
+    setPhaseSlideSettings((current) => ({ ...current, [phase]: nextSetting }));
+    setSelectedSlideByNode((current) => ({
+      ...current,
+      [selectedNode.id]: clamp(current[selectedNode.id] ?? 0, 0, nextCount - 1)
+    }));
+  }
+
+  function updateSelectedSlideIndex(index) {
+    setSelectedSlideByNode((current) => ({ ...current, [selectedNode.id]: index }));
+  }
+
+  function updateSelectedSlideSettings(nextSettings) {
+    setSlideSettingsByKey((current) => ({
+      ...current,
+      [getSlideKey(selectedNode.id, selectedSlideIndex)]: nextSettings
+    }));
   }
 
   function startPaneResize(side, event) {
@@ -1925,7 +2432,7 @@ function App() {
   async function copySlide() {
     const copy = `${slide.title}
 
-Phase ${selectedNode.phase} | ${getCognitiveLabel(selectedNode.dok)} | ${selectedNode.access} | ${getLearningLocusFromComponent(selectedNode).label} | ${selectedNode.audience}
+Phase ${selectedNode.phase} | Slide ${selectedSlideIndex + 1} of ${selectedSlideCount} | ${slideTypeLabels[slide.slideType]} | ${getCognitiveLabel(selectedNode.dok)} | ${selectedNode.access} | ${getLearningLocusFromComponent(selectedNode).label} | ${selectedNode.audience}
 
 Concept:
 ${slide.concept}
@@ -1994,75 +2501,100 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
             </button>
           </div>
 
-          <div className="form-stack">
-            <SelectField label="Audience type" value={form.audience} onChange={(value) => updateForm("audience", value)} options={audiences} />
-            <label className="field-label">
-              <span>Subject / theme</span>
-              <input className="field-control" value={form.theme} onChange={(event) => updateForm("theme", event.target.value)} />
-            </label>
-            <label className="field-label">
-              <span>Learning goal</span>
-              <textarea
-                className="field-control textarea"
-                value={form.goal}
-                onChange={(event) => updateForm("goal", event.target.value)}
-              />
-            </label>
-            <SelectField label="Duration" value={form.duration} onChange={(value) => updateForm("duration", value)} options={durations} />
-            <SelectField
-              label="Current phase"
-              value={String(form.phase)}
-              onChange={(value) => updateForm("phase", Number(value))}
-              options={["1", "2", "3", "4", "5", "6"]}
-            />
-            <div className="two-column-fields">
-              <SelectField label="Starting cognitive level" value={form.startDok} onChange={(value) => updateForm("startDok", value)} options={cognitiveLevelOptions} />
-              <SelectField label="Starting access" value={form.startAccess} onChange={(value) => updateForm("startAccess", value)} options={accessibilityLevels} />
-              <SelectField label="Target cognitive level" value={form.targetDok} onChange={(value) => updateForm("targetDok", value)} options={cognitiveLevelOptions} />
-              <SelectField label="Target access" value={form.targetAccess} onChange={(value) => updateForm("targetAccess", value)} options={accessibilityLevels} />
-            </div>
-            <div className="theory-note">
-              <h3>Why this axis is not just Webb's DOK</h3>
-              <p>
-                Webb's Depth of Knowledge is used here as a foundation for cognitive complexity, not as a rigid ladder. This prototype adapts DOK alongside Hess's Cognitive Rigor Matrix and Bloom-style progression to create a practical continuum for museum curriculum design. Learners may move upward, downward, or across the continuum as mastery support requires.
-              </p>
-            </div>
-            <div className="theory-note">
-              <h3>Why these learning-locus labels matter</h3>
-              <p>
-                This system is inspired by Understanding by Design and related learning theories that distinguish between enduring transferable understanding, important supporting knowledge, and contextual familiarity. Placement decisions are informed by transfer relevance, conceptual connectedness, mastery dependencies, and learner meaning-making.
-              </p>
-            </div>
-            <LearningLocusSettings
-              settings={learningLocusSettings}
-              onChange={updateLearningLocusSettings}
-              selectedNode={selectedNode}
-            />
-            <DesignerMasterySettings settings={masterySettings} onChange={setMasterySettings} />
-            <SampleConceptPanel onLoadSample={loadSampleConcept} />
-            <KnowledgeCorpusPanel
-              corpusQuery={corpusQuery}
-              onCorpusQueryChange={setCorpusQuery}
-              recommendedItems={recommendedCorpusItems}
-              searchResults={corpusSearchResults}
-              selectedCorpusItems={selectedCorpusItems}
-              onUseInModule={addCorpusItemToModule}
-              onGenerateMasteryPath={generateMasteryPathFromCorpus}
-            />
+          <div className="designer-action-strip">
             <button className="primary-button full-width generate-button" onClick={generatePath}>
               <Route size={18} /> Generate Learning Path
             </button>
           </div>
 
-          <div className="phase-arc">
-            <div className="section-label">
-              <Layers size={17} /> Show phase arc
-            </div>
-            <ol>
-              {phaseArc.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ol>
+          <div className="designer-accordion">
+            <AccordionSection id="experience" title="Experience Setup" icon={<Sparkles size={17} />} open={openDesignerSections.experience} onToggle={toggleDesignerSection}>
+              <div className="form-stack compact">
+                <div className="two-column-fields">
+                  <SelectField label="Audience type" value={form.audience} onChange={(value) => updateForm("audience", value)} options={audiences} />
+                  <SelectField label="Duration" value={form.duration} onChange={(value) => updateForm("duration", value)} options={durations} />
+                </div>
+                <label className="field-label">
+                  <span>Subject / theme</span>
+                  <input className="field-control" value={form.theme} onChange={(event) => updateForm("theme", event.target.value)} />
+                </label>
+                <label className="field-label">
+                  <span>Learning goal</span>
+                  <textarea className="field-control textarea" value={form.goal} onChange={(event) => updateForm("goal", event.target.value)} />
+                </label>
+                <SelectField label="Current phase" value={String(form.phase)} onChange={(value) => updateForm("phase", Number(value))} options={["1", "2", "3", "4", "5", "6"]} />
+              </div>
+            </AccordionSection>
+
+            <AccordionSection id="axis" title="Axis Settings" icon={<Target size={17} />} open={openDesignerSections.axis} onToggle={toggleDesignerSection}>
+              <div className="form-stack compact">
+                <div className="two-column-fields">
+                  <SelectField label="Starting cognitive level" value={form.startDok} onChange={(value) => updateForm("startDok", value)} options={cognitiveLevelOptions} />
+                  <SelectField label="Starting access" value={form.startAccess} onChange={(value) => updateForm("startAccess", value)} options={accessibilityLevels} />
+                  <SelectField label="Target cognitive level" value={form.targetDok} onChange={(value) => updateForm("targetDok", value)} options={cognitiveLevelOptions} />
+                  <SelectField label="Target access" value={form.targetAccess} onChange={(value) => updateForm("targetAccess", value)} options={accessibilityLevels} />
+                </div>
+                <div className="theory-note">
+                  <h3>Why this axis is not just Webb's DOK</h3>
+                  <p>
+                    Webb's Depth of Knowledge is used here as a foundation for cognitive complexity, not as a rigid ladder. This prototype adapts DOK alongside Hess's Cognitive Rigor Matrix and Bloom-style progression to create a practical continuum for museum curriculum design. Learners may move upward, downward, or across the continuum as mastery support requires.
+                  </p>
+                </div>
+              </div>
+            </AccordionSection>
+
+            <AccordionSection id="locus" title="Learning-Locus Settings" icon={<Target size={17} />} open={openDesignerSections.locus} onToggle={toggleDesignerSection}>
+              <div className="form-stack compact">
+                <div className="theory-note">
+                  <h3>Why these learning-locus labels matter</h3>
+                  <p>
+                    This system is inspired by Understanding by Design and related learning theories that distinguish between enduring transferable understanding, important supporting knowledge, and contextual familiarity. Placement decisions are informed by transfer relevance, conceptual connectedness, mastery dependencies, and learner meaning-making.
+                  </p>
+                </div>
+                <LearningLocusSettings settings={learningLocusSettings} onChange={updateLearningLocusSettings} selectedNode={selectedNode} />
+              </div>
+            </AccordionSection>
+
+            <AccordionSection id="mastery" title="Mastery Settings" icon={<Brain size={17} />} open={openDesignerSections.mastery} onToggle={toggleDesignerSection}>
+              <DesignerMasterySettings settings={masterySettings} onChange={setMasterySettings} />
+            </AccordionSection>
+
+            <AccordionSection id="slides" title="Slide Settings" icon={<BookOpen size={17} />} open={openDesignerSections.slides} onToggle={toggleDesignerSection}>
+              <SlideSettingsPanel
+                selectedNode={selectedNode}
+                selectedSlideIndex={selectedSlideIndex}
+                slideCountSetting={selectedPhaseSlideSetting}
+                slideSettings={selectedSlideSettings}
+                onSlideCountChange={updatePhaseSlideSetting}
+                onSelectedSlideChange={updateSelectedSlideIndex}
+                onSlideSettingsChange={updateSelectedSlideSettings}
+              />
+            </AccordionSection>
+
+            <AccordionSection id="corpus" title="Corpus / Sources" icon={<BookOpen size={17} />} open={openDesignerSections.corpus} onToggle={toggleDesignerSection}>
+              <div className="form-stack compact">
+                <SampleConceptPanel onLoadSample={loadSampleConcept} />
+                <KnowledgeCorpusPanel
+                  corpusQuery={corpusQuery}
+                  onCorpusQueryChange={setCorpusQuery}
+                  recommendedItems={recommendedCorpusItems}
+                  searchResults={corpusSearchResults}
+                  selectedCorpusItems={selectedCorpusItems}
+                  onUseInModule={addCorpusItemToModule}
+                  onGenerateMasteryPath={generateMasteryPathFromCorpus}
+                />
+              </div>
+            </AccordionSection>
+
+            <AccordionSection id="phase" title="Phase Arc" icon={<Layers size={17} />} open={openDesignerSections.phase} onToggle={toggleDesignerSection}>
+              <div className="phase-arc compact-phase-arc">
+                <ol>
+                  {phaseArc.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </div>
+            </AccordionSection>
           </div>
         </aside>
         ) : null}
@@ -2102,7 +2634,17 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
             </div>
           </div>
 
-          <PathNavigator nodes={nodes} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} />
+          {navigatorDockPosition === "top-right" ? (
+            <PathNavigator
+              nodes={nodes}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={setSelectedNodeId}
+              hidden={isNavigatorHidden}
+              dockPosition={navigatorDockPosition}
+              onDockPositionChange={setNavigatorDockPosition}
+              onHiddenChange={setIsNavigatorHidden}
+            />
+          ) : null}
 
           <div className="map-scroll">
             <div className="learning-grid">
@@ -2154,6 +2696,17 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
               ))}
             </div>
           </div>
+          {navigatorDockPosition !== "top-right" ? (
+            <PathNavigator
+              nodes={nodes}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={setSelectedNodeId}
+              hidden={isNavigatorHidden}
+              dockPosition={navigatorDockPosition}
+              onDockPositionChange={setNavigatorDockPosition}
+              onHiddenChange={setIsNavigatorHidden}
+            />
+          ) : null}
         </section>
 
         {showSlidePanel ? (
@@ -2179,9 +2732,18 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           </div>
 
           <article className="slide-card">
+            <SlideStepper
+              slideCount={selectedSlideCount}
+              selectedSlideIndex={selectedSlideIndex}
+              onSelectSlide={updateSelectedSlideIndex}
+              slideSettingsByKey={slideSettingsByKey}
+              selectedNode={selectedNode}
+            />
             <h3>{slide.title}</h3>
             <div className="chip-row">
               <span className="chip">Phase {selectedNode.phase}</span>
+              <span className="chip">Slide {selectedSlideIndex + 1} of {selectedSlideCount}</span>
+              <span className="chip">{slideTypeLabels[slide.slideType]}</span>
               <span className="chip">{getCognitiveLabel(selectedNode.dok)}</span>
               <span className="chip">{selectedNode.access}</span>
               <span className="chip">{getLearningLocusFromComponent(selectedNode).label}</span>
@@ -2257,6 +2819,8 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
                 </section>
               ) : null}
             </div>
+
+            {isLearnerMode || showLearnerPreview ? <LearnerActivity slide={slide} /> : null}
 
             {isDesignerMode ? (
               <div className="learner-preview-toggle">
