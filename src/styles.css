@@ -539,6 +539,17 @@ h1 {
   line-height: 1.45;
 }
 
+.visual-source-debug {
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: #fffdf8;
+  color: #6b5d4d;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
 .settings-hint {
   border: 1px dashed var(--line-strong);
   border-radius: 12px;
@@ -1742,17 +1753,30 @@ h1 {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 22px;
+  --course-image: linear-gradient(135deg, rgba(15, 118, 110, 0.58), rgba(183, 121, 31, 0.36));
   background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.22), rgba(183, 121, 31, 0.16)),
-    repeating-radial-gradient(circle at 24% 22%, rgba(15, 118, 110, 0.28) 0 1.2px, transparent 1.4px 8px),
+    linear-gradient(135deg, rgba(42, 36, 30, 0.1), rgba(15, 118, 110, 0.24)),
+    radial-gradient(circle at 76% 24%, rgba(255, 240, 189, 0.54), transparent 20rem),
+    linear-gradient(115deg, rgba(15, 118, 110, 0.42), rgba(183, 121, 31, 0.24)),
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 13px),
+    repeating-radial-gradient(circle at 24% 22%, rgba(42, 36, 30, 0.32) 0 1.2px, transparent 1.6px 8px),
     #d8f1ec;
   box-shadow: var(--shadow-soft);
+  isolation: isolate;
 }
 
 .course-visual.halftone-overlay {
   display: flex;
   align-items: flex-end;
   padding: clamp(16px, 3vw, 30px);
+  background:
+    linear-gradient(90deg, rgba(42, 36, 30, 0.24), rgba(42, 36, 30, 0.04) 55%),
+    var(--course-image),
+    linear-gradient(135deg, rgba(15, 118, 110, 0.58), rgba(183, 121, 31, 0.34)),
+    repeating-linear-gradient(110deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 12px),
+    repeating-radial-gradient(circle at 22% 24%, rgba(42, 36, 30, 0.3) 0 1px, transparent 1.4px 7px),
+    #d8f1ec;
+  background-blend-mode: multiply, normal, color, soft-light, multiply, normal;
   background-position: center;
   background-size: cover;
 }
@@ -1761,18 +1785,23 @@ h1 {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(42, 36, 30, 0.78), rgba(42, 36, 30, 0.42) 45%, rgba(255, 253, 248, 0.12)),
-    radial-gradient(circle at 76% 22%, rgba(255, 253, 248, 0.32), transparent 26rem),
-    repeating-radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.22) 0 1px, transparent 1.4px 7px);
+    linear-gradient(90deg, rgba(42, 36, 30, 0.68), rgba(42, 36, 30, 0.26) 46%, rgba(255, 253, 248, 0.06)),
+    radial-gradient(circle at 78% 22%, rgba(255, 253, 248, 0.24), transparent 24rem),
+    radial-gradient(circle at 50% 50%, transparent 40%, rgba(42, 36, 30, 0.46) 100%),
+    repeating-radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.28) 0 1px, transparent 1.4px 6px);
   content: "";
+  z-index: 1;
 }
 
 .course-visual.halftone-overlay::after {
   position: absolute;
   inset: 0;
-  background: rgba(15, 118, 110, 0.16);
-  backdrop-filter: saturate(0.9);
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.22), rgba(183, 121, 31, 0.16)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 5px);
+  backdrop-filter: saturate(1.08) contrast(1.04);
   content: "";
+  z-index: 1;
 }
 
 .course-visual-text-panel {
@@ -1817,7 +1846,7 @@ h1 {
   position: absolute;
   right: 16px;
   bottom: 16px;
-  z-index: 2;
+  z-index: 3;
   max-width: 360px;
   border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 14px;
@@ -1829,35 +1858,56 @@ h1 {
 }
 
 .course-image-frame {
-  min-height: 300px;
+  position: relative;
+  min-height: clamp(360px, 38vw, 560px);
+  overflow: hidden;
   border-radius: 18px;
   background:
-    linear-gradient(135deg, rgba(15, 118, 110, 0.28), rgba(183, 121, 31, 0.18)),
-    repeating-radial-gradient(circle at 30% 24%, rgba(42, 36, 30, 0.22) 0 1.1px, transparent 1.4px 8px),
+    linear-gradient(135deg, rgba(42, 36, 30, 0.08), rgba(15, 118, 110, 0.18)),
+    var(--course-image),
+    linear-gradient(135deg, rgba(15, 118, 110, 0.58), rgba(183, 121, 31, 0.34)),
+    repeating-radial-gradient(circle at 30% 24%, rgba(42, 36, 30, 0.28) 0 1.1px, transparent 1.4px 8px),
     #d8f1ec;
+  background-blend-mode: multiply, normal, color, multiply, normal;
   background-position: center;
   background-size: cover;
 }
 
+.course-image-frame::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 76% 20%, rgba(255, 253, 248, 0.22), transparent 18rem),
+    radial-gradient(circle at 50% 50%, transparent 45%, rgba(42, 36, 30, 0.36) 100%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0 2px, transparent 2px 12px);
+  content: "";
+}
+
 .course-image-fallback {
   display: grid;
+  position: relative;
+  z-index: 1;
   min-height: inherit;
-  place-items: center;
+  align-items: end;
+  justify-items: start;
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: inherit;
-  background: rgba(255, 253, 248, 0.44);
-  color: #2a241e;
+  background:
+    linear-gradient(180deg, transparent 0 42%, rgba(42, 36, 30, 0.66)),
+    linear-gradient(135deg, rgba(255, 253, 248, 0.18), transparent 42%);
+  color: #fffaf0;
   padding: 18px;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 850;
   letter-spacing: 0.08em;
-  text-align: center;
+  text-align: left;
+  text-shadow: 0 2px 10px rgba(42, 36, 30, 0.72);
   text-transform: uppercase;
 }
 
 .course-visual.image-beside-text {
   display: grid;
-  grid-template-columns: minmax(260px, 0.95fr) minmax(280px, 1.05fr);
+  grid-template-columns: minmax(340px, 1.15fr) minmax(280px, 0.85fr);
   gap: 18px;
   align-items: stretch;
   padding: 18px;
@@ -1887,6 +1937,26 @@ h1 {
   place-items: center;
   min-height: 280px;
   padding: 20px;
+}
+
+.course-visual.generated-fallback {
+  background:
+    linear-gradient(120deg, rgba(42, 36, 30, 0.46), rgba(15, 118, 110, 0.22)),
+    radial-gradient(circle at 25% 28%, rgba(255, 240, 189, 0.68), transparent 12rem),
+    linear-gradient(90deg, rgba(255, 253, 248, 0.16) 0 12%, transparent 12% 18%, rgba(255, 253, 248, 0.13) 18% 30%, transparent 30%),
+    repeating-radial-gradient(circle at 74% 35%, rgba(42, 36, 30, 0.32) 0 1.2px, transparent 1.6px 8px),
+    #d8f1ec;
+}
+
+.course-visual.generated-fallback::before {
+  position: absolute;
+  inset: 18px;
+  border: 1px solid rgba(255, 253, 248, 0.45);
+  border-radius: 18px;
+  background:
+    linear-gradient(90deg, rgba(255, 253, 248, 0.18) 0 18%, transparent 18%),
+    linear-gradient(0deg, rgba(42, 36, 30, 0.12) 0 2px, transparent 2px 28px);
+  content: "";
 }
 
 .course-content {

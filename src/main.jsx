@@ -216,6 +216,26 @@ const museumImages = [
   }
 ];
 
+const visualKeywordGroups = {
+  breakfast: ["breakfast", "food", "feeding", "children", "meal", "meals", "free food", "community care", "survival program", "survival programs"],
+  research: ["research", "huey", "newton", "archive", "archives", "archival", "theory", "praxis", "study", "documents"],
+  platform: ["ten-point", "ten point", "program", "demands", "freedom", "rights", "political education", "platform"],
+  health: ["health", "medical", "clinic", "care", "sickle", "screening", "public health"],
+  media: ["newspaper", "media", "flyer", "article", "communication", "visual rhetoric", "headline", "publication"],
+  education: ["education", "school", "learning", "discussion", "reflection", "museum", "public memory", "teach"],
+  safety: ["police", "violence", "safety", "surveillance", "elder", "seniors", "self-determination", "response"]
+};
+
+const imageKeywordAliases = {
+  "free-breakfast": visualKeywordGroups.breakfast,
+  "research-room": visualKeywordGroups.research,
+  "ten-point-program": visualKeywordGroups.platform,
+  "community-health": visualKeywordGroups.health,
+  "newspaper-media": visualKeywordGroups.media,
+  "civic-education": visualKeywordGroups.education,
+  "community-safety": visualKeywordGroups.safety
+};
+
 const phaseArc = [
   "Phase 1: orient learners through essential terms, context, and recognition.",
   "Phase 2: apply concepts to concrete community needs and policy questions.",
@@ -991,6 +1011,27 @@ function getVisualSearchText({ form, selectedNode, slide, selectedCorpusItems })
     .toLowerCase();
 }
 
+function normalizeVisualText(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getTokenMatchScore(searchText, phrase) {
+  const normalizedPhrase = normalizeVisualText(phrase);
+  if (!normalizedPhrase) return 0;
+  if (searchText.includes(normalizedPhrase)) return normalizedPhrase.split(" ").length + 3;
+  const phraseTokens = normalizedPhrase.split(/[\s-]+/).filter((token) => token.length > 2);
+  if (!phraseTokens.length) return 0;
+  return phraseTokens.reduce((score, token) => {
+    if (searchText.includes(token)) return score + 1;
+    const fuzzyHit = searchText.split(" ").some((searchToken) => searchToken.length > 4 && (searchToken.includes(token) || token.includes(searchToken)));
+    return score + (fuzzyHit ? 0.5 : 0);
+  }, 0);
+}
+
 function selectMuseumImage({ visualSettings, form, selectedNode, slide, selectedCorpusItems }) {
   if (!visualSettings.autoPopulate && visualSettings.selectedImageId === "text-only") return null;
   if (visualSettings.selectedImageId && visualSettings.selectedImageId !== "auto") {
@@ -998,13 +1039,18 @@ function selectMuseumImage({ visualSettings, form, selectedNode, slide, selected
   }
   if (!visualSettings.autoPopulate) return null;
 
-  const searchText = getVisualSearchText({ form, selectedNode, slide, selectedCorpusItems });
+  const searchText = normalizeVisualText(getVisualSearchText({ form, selectedNode, slide, selectedCorpusItems }));
   const scoredImages = museumImages.map((image) => {
-    const score = image.themes.reduce((total, theme) => {
-      const normalizedTheme = theme.toLowerCase();
-      return total + (searchText.includes(normalizedTheme) ? normalizedTheme.split(" ").length + 1 : 0);
-    }, 0);
-    const phaseBoost = Number(selectedNode.phase) >= 5 && image.id === "civic-education" ? 1 : 0;
+    const keywords = [...image.themes, ...(imageKeywordAliases[image.id] ?? [])];
+    const score = keywords.reduce((total, keyword) => total + getTokenMatchScore(searchText, keyword), 0);
+    const phase = Number(selectedNode.phase);
+    const phaseBoost =
+      (phase <= 2 && image.id === "free-breakfast") ||
+      (phase === 3 && image.id === "newspaper-media") ||
+      (phase === 4 && image.id === "community-safety") ||
+      (phase >= 5 && image.id === "civic-education")
+        ? 2
+        : 0;
     const slideBoost =
       slide.slideType === "discussion" || slide.slideType === "reflection"
         ? image.id === "civic-education"
@@ -1019,11 +1065,15 @@ function selectMuseumImage({ visualSettings, form, selectedNode, slide, selected
 
 function getCourseVisual({ visualSettings, form, selectedNode, slide, selectedCorpusItems }) {
   const image = selectMuseumImage({ visualSettings, form, selectedNode, slide, selectedCorpusItems });
+  const selectedSpecificImage = visualSettings.selectedImageId && !["auto", "text-only"].includes(visualSettings.selectedImageId);
   return {
     image,
     style: visualSettings.visualStyle,
     caption: visualSettings.caption || image?.title || selectedNode.theme,
-    imagePrompt: visualSettings.imagePrompt || slide.prompt
+    imagePrompt: visualSettings.imagePrompt || slide.prompt,
+    sourceLabel: image
+      ? `${selectedSpecificImage ? "Selected image" : "Auto-selected image"}: ${image.id}`
+      : "Fallback generated visual"
   };
 }
 
@@ -1780,6 +1830,7 @@ function SlideSettingsPanel({
   slideSettings,
   dynamicGenerationEnabled,
   visualSettings,
+  currentVisual,
   onDynamicGenerationChange,
   onVisualSettingsChange,
   onSlideCountChange,
@@ -1881,13 +1932,13 @@ function SlideSettingsPanel({
             onChange={(manualContent) => onSlideSettingsChange({ ...slideSettings, manualContent })}
           />
         ) : null}
-        <LearnerVisualSettings settings={visualSettings} onChange={onVisualSettingsChange} />
+        <LearnerVisualSettings settings={visualSettings} currentVisual={currentVisual} onChange={onVisualSettingsChange} />
       </div>
     </div>
   );
 }
 
-function LearnerVisualSettings({ settings, onChange }) {
+function LearnerVisualSettings({ settings, currentVisual, onChange }) {
   function update(key, value) {
     onChange({ ...settings, [key]: value });
   }
@@ -1936,6 +1987,9 @@ function LearnerVisualSettings({ settings, onChange }) {
           placeholder="Use generated image prompt when blank"
         />
       </label>
+      <div className="visual-source-debug">
+        Current visual source: {currentVisual?.sourceLabel ?? "Fallback generated visual"}
+      </div>
     </div>
   );
 }
@@ -2450,9 +2504,10 @@ function LearnerViewToggle({ learnerView, onChange }) {
 }
 
 function CourseVisual({ slide, selectedNode, visual }) {
+  const visualStyle = visual.image ? { "--course-image": `url("${visual.image.src}")` } : {};
   if (visual.style === "Text only" || !visual.image) {
     return (
-      <div className="course-visual text-only">
+      <div className="course-visual text-only generated-fallback">
         <div className="course-visual-text-panel">
           <span>{slideTypeLabels[slide.slideType]}</span>
           <h3>{slide.title}</h3>
@@ -2462,11 +2517,10 @@ function CourseVisual({ slide, selectedNode, visual }) {
     );
   }
 
-  const backgroundStyle = { backgroundImage: `url("${visual.image.src}")` };
   if (visual.style === "Image beside text") {
     return (
       <div className="course-visual image-beside-text">
-        <div className="course-image-frame" style={backgroundStyle} aria-label={visual.image.title}>
+        <div className="course-image-frame" style={visualStyle} aria-label={visual.image.title}>
           <div className="course-image-fallback">{visual.image.title}</div>
         </div>
         <div className="course-visual-text-panel">
@@ -2481,7 +2535,7 @@ function CourseVisual({ slide, selectedNode, visual }) {
   if (visual.style === "Image only with caption") {
     return (
       <figure className="course-visual image-caption">
-        <div className="course-image-frame" style={backgroundStyle} aria-label={visual.image.title}>
+        <div className="course-image-frame" style={visualStyle} aria-label={visual.image.title}>
           <div className="course-image-fallback">{visual.image.title}</div>
         </div>
         <figcaption>{visual.caption}</figcaption>
@@ -2490,7 +2544,7 @@ function CourseVisual({ slide, selectedNode, visual }) {
   }
 
   return (
-    <div className="course-visual halftone-overlay" style={backgroundStyle}>
+    <div className="course-visual halftone-overlay" style={visualStyle}>
       <div className="course-visual-text-panel">
         <span>{visual.caption}</span>
         <h3>{slide.title}</h3>
@@ -3214,6 +3268,7 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
                 slideSettings={selectedSlideSettings}
                 dynamicGenerationEnabled={dynamicGenerationEnabled}
                 visualSettings={learnerVisualSettings}
+                currentVisual={courseVisual}
                 onDynamicGenerationChange={setDynamicGenerationEnabled}
                 onVisualSettingsChange={setLearnerVisualSettings}
                 onSlideCountChange={updatePhaseSlideSetting}
