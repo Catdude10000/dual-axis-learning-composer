@@ -18,7 +18,9 @@ import {
   ChevronDown,
   ChevronRight,
   Maximize2,
-  Minimize2
+  Minimize2,
+  MoveLeft,
+  MoveRight
 } from "lucide-react";
 import {
   getCorpusById,
@@ -682,6 +684,14 @@ function makeDefaultSlideSettings(node, slideIndex = 0) {
     discussion: {
       prompt: `What question should a museum educator ask to help visitors discuss "${node.title}" respectfully?`,
       partnerPrompt: "In pairs, choose one discussion norm that would make this conversation more careful and historically grounded."
+    },
+    manualContent: {
+      title: "",
+      concept: "",
+      why: "",
+      task: "",
+      deeper: "",
+      imagePrompt: ""
     }
   };
 }
@@ -704,22 +714,199 @@ function getSlideSettings(slideSettingsByKey, node, slideIndex) {
   return slideSettingsByKey[getSlideKey(node.id, slideIndex)] ?? makeDefaultSlideSettings(node, slideIndex);
 }
 
-function makeLearningSlide(node, variantIndex, slideIndex = 0, slideSettings) {
-  const baseSlide = makeSlide(node, variantIndex + slideIndex);
-  const settings = slideSettings ?? makeDefaultSlideSettings(node, slideIndex);
-  const ordinal = slideIndex + 1;
-  const titleSuffix = ordinal > 1 ? `: Slide ${ordinal}` : "";
+function buildSlideGenerationContext({
+  node,
+  form,
+  selectedCorpusItems,
+  masterySettings,
+  learningLocus,
+  slideIndex,
+  slideCount,
+  slideSettings
+}) {
+  const corpusItems = selectedCorpusItems.length
+    ? selectedCorpusItems
+    : node.corpusItemId
+      ? [getCorpusById(node.corpusItemId)].filter(Boolean)
+      : [];
+  const corpusFocus = corpusItems.map((item) => item.title).join(", ");
+  const corpusUses = corpusItems.flatMap((item) => item.learningUses ?? []).slice(0, 4);
+  return {
+    audience: form.audience,
+    theme: form.theme,
+    goal: form.goal,
+    phase: Number(node.phase ?? form.phase),
+    slideNumber: slideIndex + 1,
+    slideCount,
+    slideType: slideSettings.slideType,
+    slideTypeLabel: slideTypeLabels[slideSettings.slideType],
+    cognitiveLevel: getCognitiveLabel(node.dok),
+    cognitiveDescription: getCognitiveLevel(node.dok).description,
+    accessLevel: node.access,
+    learningLocus,
+    masteryThreshold: masterySettings.masteryThreshold,
+    adaptivePathStyle: masterySettings.adaptivePathStyle,
+    includePartnerPrompts: masterySettings.includePartnerPrompts,
+    halftonePromptPercent: masterySettings.halftonePromptPercent,
+    nodeTitle: node.title,
+    nodeTheme: node.theme,
+    corpusFocus,
+    corpusUses
+  };
+}
+
+function generateAssessmentPrompt(context) {
+  const evidenceCue = context.corpusFocus ? ` using ${context.corpusFocus}` : "";
+  if (context.slideType === "multiple_choice") {
+    return `Which response best connects ${context.nodeTitle} to ${context.learningLocus.label.toLowerCase()}${evidenceCue}?`;
+  }
+  if (context.slideType === "true_false") {
+    return `${context.nodeTitle} should be interpreted through both evidence and civic meaning.`;
+  }
+  if (context.slideType === "fill_blank") {
+    return `${context.nodeTitle} helps learners see that ______ can shape public memory and community learning.`;
+  }
+  if (context.slideType === "short_essay") {
+    return `Explain how ${context.nodeTitle} advances the learning goal for ${context.audience.toLowerCase()} learners. Use one source, concept, or example.`;
+  }
+  if (context.slideType === "reflection") {
+    return `What changed in your thinking about ${context.theme} after working with ${context.nodeTitle}?`;
+  }
+  if (context.slideType === "discussion") {
+    return `What question would help a partner discuss ${context.nodeTitle} with historical care and curiosity?`;
+  }
+  return `How does ${context.nodeTitle} support the learning goal: ${context.goal}`;
+}
+
+function generateFeedbackForSlideType(context) {
+  const target = `${context.cognitiveLevel} / ${context.accessLevel}`;
+  return {
+    correct: `Correct. This response connects the slide focus to ${context.learningLocus.label} while staying aligned to ${target}.`,
+    incorrect: `Not quite. Revisit how the slide asks you to connect evidence, learner action, and ${context.learningLocus.shortLabel.toLowerCase()} understanding.`,
+    general: `Strong responses should use evidence, name the civic or museum-learning meaning, and meet the ${context.masteryThreshold.toLowerCase()} threshold.`
+  };
+}
+
+function generateImagePrompt(context) {
+  const styleNotes = [
+    "classroom-safe",
+    "museum-appropriate",
+    "historically respectful",
+    "readable foreground/background balance"
+  ];
+  if (Number(context.halftonePromptPercent) > 0) styleNotes.push("halftone-inspired educational print texture");
+  const sourceCue = context.corpusFocus ? ` Reference the learning source focus: ${context.corpusFocus}.` : "";
+  return `Create a ${styleNotes.join(", ")} image prompt for a learning slide about "${context.nodeTitle}" within "${context.theme}". Show the idea through objects, spaces, documents, or community-learning context rather than real person likenesses.${sourceCue} Leave clear visual space for slide text and make the composition suitable for ${context.audience.toLowerCase()} learners.`;
+}
+
+function generateSlideContent(context) {
+  const feedback = generateFeedbackForSlideType(context);
+  const assessmentPrompt = generateAssessmentPrompt(context);
+  const sourcePhrase = context.corpusFocus
+    ? ` The slide draws on ${context.corpusFocus} to keep interpretation anchored in source-informed learning.`
+    : "";
+  const titlePrefix = {
+    content: "Understand",
+    multiple_choice: "Choose Evidence For",
+    true_false: "Test the Claim",
+    fill_blank: "Complete the Connection",
+    short_essay: "Explain",
+    reflection: "Reflect on",
+    discussion: "Discuss"
+  }[context.slideType];
+  const concept = `In Phase ${context.phase}, ${context.audience.toLowerCase()} learners examine ${context.nodeTitle} as part of "${context.theme}." This slide targets ${context.cognitiveLevel} with ${context.accessLevel.toLowerCase()} knowledge access, asking learners to ${context.cognitiveDescription.toLowerCase()} The learning-locus emphasis is ${context.learningLocus.label.toLowerCase()}, so the activity keeps attention on ${context.learningLocus.description.toLowerCase()}${sourcePhrase}`;
+  const why = `This matters because the learning goal is not just to remember content, but to use ${context.nodeTitle} to reason about evidence, community meaning, and public interpretation. The ${context.adaptivePathStyle.toLowerCase()} mastery design keeps learners moving toward ${context.masteryThreshold.toLowerCase()} without losing the larger course arc.`;
+  const task = assessmentPrompt;
+  const deeper = [
+    `Connect this slide to the course goal: ${context.goal}`,
+    context.corpusUses.length ? `Use a source as evidence for ${context.corpusUses[0]}.` : `Name one piece of evidence a museum educator should add next.`,
+    `Extend the idea toward ${context.learningLocus.shortLabel.toLowerCase()} learning by explaining what a learner should be able to do after this slide.`
+  ];
+  const interaction = {
+    slideType: context.slideType,
+    multipleChoice: {
+      choices: [
+        `It connects ${context.nodeTitle} to evidence, learner action, and civic meaning.`,
+        `It treats ${context.nodeTitle} as a detail to memorize without interpretation.`,
+        `It removes source context so learners can answer faster.`,
+        `It asks learners to ignore the ${context.accessLevel.toLowerCase()} access target.`
+      ],
+      correctIndex: 0,
+      feedback: feedback.correct
+    },
+    trueFalse: {
+      correctAnswer: "true",
+      feedback: feedback.correct
+    },
+    fillBlank: {
+      prompt: assessmentPrompt,
+      expectedAnswer: `${context.learningLocus.shortLabel.toLowerCase()} understanding, evidence, community meaning, or public memory`
+    },
+    shortEssay: {
+      prompt: assessmentPrompt,
+      criteria: feedback.general
+    },
+    reflection: {
+      prompt: assessmentPrompt,
+      partnerPrompt: context.includePartnerPrompts
+        ? `Compare your reflection with a partner. Where did you use similar evidence, and where did your interpretations differ?`
+        : ""
+    },
+    discussion: {
+      prompt: assessmentPrompt,
+      partnerPrompt: context.includePartnerPrompts
+        ? `Invite a partner to answer first, then build on their idea with one source-informed detail.`
+        : ""
+    },
+    manualContent: makeDefaultSlideSettings({ title: context.nodeTitle }, context.slideNumber - 1).manualContent
+  };
+
+  return {
+    title: `${titlePrefix} ${context.nodeTitle}`,
+    concept,
+    why,
+    task,
+    deeper,
+    prompt: generateImagePrompt(context),
+    checkForUnderstandingPrompt: assessmentPrompt,
+    masteryCriteria: feedback.general,
+    interaction
+  };
+}
+
+function applyManualContent(baseSlide, slideSettings) {
+  const manual = slideSettings.manualContent ?? {};
   return {
     ...baseSlide,
-    title: `${baseSlide.title}${titleSuffix}`,
+    title: manual.title || baseSlide.title,
+    concept: manual.concept || baseSlide.concept,
+    why: manual.why || baseSlide.why,
+    task: manual.task || baseSlide.task,
+    deeper: manual.deeper ? manual.deeper.split("\n").map((item) => item.trim()).filter(Boolean) : baseSlide.deeper,
+    prompt: manual.imagePrompt || baseSlide.prompt
+  };
+}
+
+function makeLearningSlide(node, variantIndex, slideIndex = 0, slideSettings, dynamicGenerationEnabled = false, generationContext = null) {
+  const baseSlide = makeSlide(node, variantIndex + slideIndex);
+  const settings = slideSettings ?? makeDefaultSlideSettings(node, slideIndex);
+  const generatedSlide = dynamicGenerationEnabled && generationContext ? generateSlideContent(generationContext) : null;
+  const ordinal = slideIndex + 1;
+  const titleSuffix = ordinal > 1 ? `: Slide ${ordinal}` : "";
+  const sourceSlide = generatedSlide ?? applyManualContent(baseSlide, settings);
+  const interaction = generatedSlide?.interaction ?? settings;
+  return {
+    ...sourceSlide,
+    title: `${sourceSlide.title}${titleSuffix}`,
     concept:
-      ordinal > 1
-        ? `${baseSlide.concept} This slide extends the module with a focused ${slideTypeLabels[settings.slideType].toLowerCase()} activity.`
-        : baseSlide.concept,
-    task: settings.slideType === "content" ? baseSlide.task : getInteractivePrompt(settings, baseSlide.task),
+      ordinal > 1 && !generatedSlide
+        ? `${sourceSlide.concept} This slide extends the module with a focused ${slideTypeLabels[settings.slideType].toLowerCase()} activity.`
+        : sourceSlide.concept,
+    task: settings.slideType === "content" ? sourceSlide.task : getInteractivePrompt(interaction, sourceSlide.task),
     slideIndex,
     slideType: settings.slideType,
-    interaction: settings
+    interaction,
+    dynamicGenerated: !!generatedSlide
   };
 }
 
@@ -1484,6 +1671,8 @@ function SlideSettingsPanel({
   selectedSlideIndex,
   slideCountSetting,
   slideSettings,
+  dynamicGenerationEnabled,
+  onDynamicGenerationChange,
   onSlideCountChange,
   onSelectedSlideChange,
   onSlideSettingsChange
@@ -1529,6 +1718,14 @@ function SlideSettingsPanel({
         <BookOpen size={17} /> Slide Settings
       </div>
       <div className="form-stack compact">
+        <div className="dynamic-generation-control">
+          <CheckboxField
+            label={`Dynamic generation: ${dynamicGenerationEnabled ? "On" : "Off"}`}
+            checked={dynamicGenerationEnabled}
+            onChange={onDynamicGenerationChange}
+          />
+          <p>Dynamic generation currently uses local template logic; future version can connect to AI image/text generation.</p>
+        </div>
         <div className="two-column-fields">
           <SelectField
             label="Slides per phase"
@@ -1569,7 +1766,51 @@ function SlideSettingsPanel({
           onUpdateChoice={updateChoice}
           onUpdateChoiceCount={updateChoiceCount}
         />
+        {!dynamicGenerationEnabled ? (
+          <ManualSlideContentEditor
+            manualContent={slideSettings.manualContent ?? makeDefaultSlideSettings(selectedNode, selectedSlideIndex).manualContent}
+            onChange={(manualContent) => onSlideSettingsChange({ ...slideSettings, manualContent })}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function ManualSlideContentEditor({ manualContent, onChange }) {
+  function update(key, value) {
+    onChange({ ...manualContent, [key]: value });
+  }
+
+  return (
+    <div className="manual-slide-editor">
+      <div className="section-label">
+        <Clipboard size={16} /> Static Slide Text
+      </div>
+      <label className="field-label">
+        <span>Manual title</span>
+        <input className="field-control" value={manualContent.title} onChange={(event) => update("title", event.target.value)} placeholder="Use stored title when blank" />
+      </label>
+      <label className="field-label">
+        <span>Manual explanation</span>
+        <textarea className="field-control textarea small-textarea" value={manualContent.concept} onChange={(event) => update("concept", event.target.value)} placeholder="Use stored explanation when blank" />
+      </label>
+      <label className="field-label">
+        <span>Manual why it matters</span>
+        <textarea className="field-control textarea small-textarea" value={manualContent.why} onChange={(event) => update("why", event.target.value)} placeholder="Use stored rationale when blank" />
+      </label>
+      <label className="field-label">
+        <span>Manual learner task</span>
+        <textarea className="field-control textarea small-textarea" value={manualContent.task} onChange={(event) => update("task", event.target.value)} placeholder="Use stored task when blank" />
+      </label>
+      <label className="field-label">
+        <span>Manual deeper prompts, one per line</span>
+        <textarea className="field-control textarea small-textarea" value={manualContent.deeper} onChange={(event) => update("deeper", event.target.value)} placeholder="Use stored deeper prompts when blank" />
+      </label>
+      <label className="field-label">
+        <span>Manual image prompt</span>
+        <textarea className="field-control textarea small-textarea" value={manualContent.imagePrompt} onChange={(event) => update("imagePrompt", event.target.value)} placeholder="Use stored image prompt when blank" />
+      </label>
     </div>
   );
 }
@@ -2029,6 +2270,132 @@ function LearnerActivity({ slide }) {
   );
 }
 
+function LearnerViewToggle({ learnerView, onChange }) {
+  return (
+    <div className="learner-view-toggle" aria-label="Learner View">
+      <span>Learner View</span>
+      <div>
+        <button type="button" className={learnerView === "course" ? "active" : ""} onClick={() => onChange("course")}>
+          Course View
+        </button>
+        <button type="button" className={learnerView === "map" ? "active" : ""} onClick={() => onChange("map")}>
+          Map View
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CourseView({
+  learnerView,
+  onLearnerViewChange,
+  selectedNode,
+  slide,
+  selectedSlideIndex,
+  selectedSlideCount,
+  onSelectSlide,
+  onBack,
+  onNext,
+  masterySettings,
+  mode,
+  learningScreen,
+  checkpoint,
+  subModule,
+  onMasteryChoice
+}) {
+  return (
+    <section className="course-view-shell">
+      <div className="course-view-topbar">
+        <LearnerViewToggle learnerView={learnerView} onChange={onLearnerViewChange} />
+        <div className="course-progress-meta">
+          <span>Phase {selectedNode.phase}</span>
+          <span>Slide {selectedSlideIndex + 1} of {selectedSlideCount}</span>
+          <span>{getCognitiveLabel(selectedNode.dok)}</span>
+          <span>{getLearningLocusFromComponent(selectedNode).label}</span>
+        </div>
+      </div>
+
+      <article className="course-card">
+        <div className="course-card-header">
+          <div>
+            <div className="course-kicker">{slideTypeLabels[slide.slideType]} activity</div>
+            <h2>{slide.title}</h2>
+          </div>
+          <span className="status-badge status-in_progress">{selectedNode.access}</span>
+        </div>
+
+        <SlideStepper
+          slideCount={selectedSlideCount}
+          selectedSlideIndex={selectedSlideIndex}
+          onSelectSlide={onSelectSlide}
+          slideSettingsByKey={{ [getSlideKey(selectedNode.id, selectedSlideIndex)]: slide.interaction }}
+          selectedNode={selectedNode}
+        />
+
+        <div className="course-hero">
+          <div className="halftone course-image">
+            <div className="placeholder-card">
+              <div>Image prompt</div>
+              <span>{selectedNode.theme}</span>
+            </div>
+          </div>
+          {slide.prompt ? (
+            <div className="prompt-box course-prompt">
+              <div className="section-label">
+                <Info size={15} /> Suggested Image Prompt
+              </div>
+              <p>{slide.prompt}</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="course-content">
+          <section>
+            <h3>Learn</h3>
+            <p>{slide.concept}</p>
+          </section>
+          <section>
+            <h3>Why it matters</h3>
+            <p>{slide.why}</p>
+          </section>
+          <section>
+            <h3>Try it</h3>
+            <p>{slide.task}</p>
+          </section>
+          <section>
+            <h3>Go deeper</h3>
+            <ul>
+              {slide.deeper.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
+
+        <LearnerActivity slide={slide} />
+
+        <div className="course-navigation">
+          <button className="secondary-button" type="button" onClick={onBack}>
+            <MoveLeft size={17} /> Back
+          </button>
+          <button className="primary-button" type="button" onClick={onNext}>
+            Next <MoveRight size={17} />
+          </button>
+        </div>
+
+        <MasteryLearningArea
+          enabled={masterySettings.enabled}
+          mode={mode}
+          learningScreen={learningScreen}
+          checkpoint={checkpoint}
+          subModule={subModule}
+          onChoice={onMasteryChoice}
+        />
+      </article>
+    </section>
+  );
+}
+
 function TelescopicProjection({ parentNode, subModule, expanded, onToggle }) {
   if (!subModule) return null;
   const previewPath = subModule.learningPath.slice(0, 5);
@@ -2198,6 +2565,8 @@ function App() {
   const [slideSettingsByKey, setSlideSettingsByKey] = React.useState({});
   const [isNavigatorHidden, setIsNavigatorHidden] = React.useState(false);
   const [navigatorDockPosition, setNavigatorDockPosition] = React.useState("below map");
+  const [dynamicGenerationEnabled, setDynamicGenerationEnabled] = React.useState(true);
+  const [learnerView, setLearnerView] = React.useState("course");
   const [openDesignerSections, setOpenDesignerSections] = React.useState({
     experience: true,
     axis: true,
@@ -2212,7 +2581,25 @@ function App() {
   const selectedSlideCount = normalizeSlideCountSetting(selectedPhaseSlideSetting);
   const selectedSlideIndex = clamp(selectedSlideByNode[selectedNode.id] ?? 0, 0, selectedSlideCount - 1);
   const selectedSlideSettings = getSlideSettings(slideSettingsByKey, selectedNode, selectedSlideIndex);
-  const slide = makeLearningSlide(selectedNode, variantIndex, selectedSlideIndex, selectedSlideSettings);
+  const selectedLearningLocus = getLearningLocusFromComponent(selectedNode);
+  const slideGenerationContext = buildSlideGenerationContext({
+    node: selectedNode,
+    form,
+    selectedCorpusItems,
+    masterySettings,
+    learningLocus: selectedLearningLocus,
+    slideIndex: selectedSlideIndex,
+    slideCount: selectedSlideCount,
+    slideSettings: selectedSlideSettings
+  });
+  const slide = makeLearningSlide(
+    selectedNode,
+    variantIndex,
+    selectedSlideIndex,
+    selectedSlideSettings,
+    dynamicGenerationEnabled,
+    slideGenerationContext
+  );
   const learningScreen = makeLearningScreen(selectedNode, slide, screenStatuses[selectedNode.id] ?? "not_started");
   const isDesignerMode = mode === "designer";
   const isLearnerMode = mode === "learner";
@@ -2257,6 +2644,33 @@ function App() {
       ...current,
       [getSlideKey(selectedNode.id, selectedSlideIndex)]: nextSettings
     }));
+  }
+
+  function goToPreviousCourseSlide() {
+    if (selectedSlideIndex > 0) {
+      updateSelectedSlideIndex(selectedSlideIndex - 1);
+      return;
+    }
+    const currentNodeIndex = nodes.findIndex((node) => node.id === selectedNode.id);
+    const previousNode = nodes[clamp(currentNodeIndex - 1, 0, nodes.length - 1)];
+    if (previousNode && previousNode.id !== selectedNode.id) {
+      setSelectedNodeId(previousNode.id);
+      const previousCount = normalizeSlideCountSetting(getPhaseSlideSetting(phaseSlideSettings, previousNode.phase));
+      setSelectedSlideByNode((current) => ({ ...current, [previousNode.id]: previousCount - 1 }));
+    }
+  }
+
+  function goToNextCourseSlide() {
+    if (selectedSlideIndex < selectedSlideCount - 1) {
+      updateSelectedSlideIndex(selectedSlideIndex + 1);
+      return;
+    }
+    const currentNodeIndex = nodes.findIndex((node) => node.id === selectedNode.id);
+    const nextNode = nodes[clamp(currentNodeIndex + 1, 0, nodes.length - 1)];
+    if (nextNode && nextNode.id !== selectedNode.id) {
+      setSelectedNodeId(nextNode.id);
+      setSelectedSlideByNode((current) => ({ ...current, [nextNode.id]: 0 }));
+    }
   }
 
   function startPaneResize(side, event) {
@@ -2463,13 +2877,30 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           </div>
           <div className="header-tools">
             <ModeToggle mode={mode} setMode={setMode} />
-            <div className="prototype-note">
-              SFD prototype: slide text and image prompts are mocked locally; future version could generate these dynamically.
-            </div>
+            {isLearnerMode ? <LearnerViewToggle learnerView={learnerView} onChange={setLearnerView} /> : null}
           </div>
         </div>
       </header>
 
+      {isLearnerMode && learnerView === "course" ? (
+        <CourseView
+          learnerView={learnerView}
+          onLearnerViewChange={setLearnerView}
+          selectedNode={selectedNode}
+          slide={slide}
+          selectedSlideIndex={selectedSlideIndex}
+          selectedSlideCount={selectedSlideCount}
+          onSelectSlide={updateSelectedSlideIndex}
+          onBack={goToPreviousCourseSlide}
+          onNext={goToNextCourseSlide}
+          masterySettings={masterySettings}
+          mode={mode}
+          learningScreen={learningScreen}
+          checkpoint={masteryCheckpoints[learningScreen.id]}
+          subModule={adaptiveSubModules[learningScreen.id]}
+          onMasteryChoice={handleMasteryChoice}
+        />
+      ) : (
       <section
         className={`dashboard ${isLearnerMode ? "learner-dashboard" : "designer-dashboard"}${isDesignerMode && isDesignerPanelCollapsed ? " designer-collapsed" : ""}${!showSlidePanel ? " slide-collapsed" : ""}${isMapFocusMode ? " map-focus-mode" : ""}`}
         style={dashboardStyle}
@@ -2565,6 +2996,8 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
                 selectedSlideIndex={selectedSlideIndex}
                 slideCountSetting={selectedPhaseSlideSetting}
                 slideSettings={selectedSlideSettings}
+                dynamicGenerationEnabled={dynamicGenerationEnabled}
+                onDynamicGenerationChange={setDynamicGenerationEnabled}
                 onSlideCountChange={updatePhaseSlideSetting}
                 onSelectedSlideChange={updateSelectedSlideIndex}
                 onSlideSettingsChange={updateSelectedSlideSettings}
@@ -2868,9 +3301,10 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           </button>
         )}
       </section>
+      )}
 
       <footer className="app-footer">
-        SFD prototype for curriculum design. Future version: AI-generated slide text, bespoke images, adaptive sequencing, and assessment feedback.
+        Dual-axis curriculum design workspace for museum learning, mastery pathways, and adaptive course experiences.
       </footer>
     </main>
   );
