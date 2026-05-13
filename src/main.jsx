@@ -112,6 +112,12 @@ const masteryCognitiveTargets = ["adaptive", ...cognitiveLevelOptions];
 const movementOptions = ["Yes, adaptive movement encouraged", "Limited movement only", "No, keep sequence mostly upward"];
 const slideCountOptions = ["1", "2", "3", "4", "5", "Custom"];
 const navigatorDockOptions = ["below map", "top-right", "bottom-right"];
+const learnerVisualStyleOptions = [
+  "Image beside text",
+  "Halftone background with text overlay",
+  "Image only with caption",
+  "Text only"
+];
 const slideTypes = [
   { value: "content", label: "Content" },
   { value: "multiple_choice", label: "Multiple choice" },
@@ -162,6 +168,53 @@ const learningLocusLevels = [
 ];
 const learningLocusOptions = ["Auto-evaluate", ...learningLocusLevels.map((level) => level.label)];
 const learningLocusWeightingOptions = ["Balanced", "Transfer-focused", "Mastery-focused", "Relationship-focused"];
+
+// Add real image files at /public/images using these filenames. The course view
+// gracefully falls back to styled halftone panels when a file is not present.
+const museumImages = [
+  {
+    id: "research-room",
+    title: "Dr. Huey P. Newton Research Room",
+    themes: ["research", "theory", "praxis", "archives", "archive", "Huey Newton", "study"],
+    src: "/images/research-room.jpg"
+  },
+  {
+    id: "free-breakfast",
+    title: "People's Free Food Program",
+    themes: ["breakfast", "food", "survival", "survival programs", "community care", "mutual aid"],
+    src: "/images/free-breakfast.jpg"
+  },
+  {
+    id: "ten-point-program",
+    title: "Ten-Point Program",
+    themes: ["ten-point program", "political education", "demands", "freedom", "platform", "rights"],
+    src: "/images/ten-point-program.jpg"
+  },
+  {
+    id: "community-health",
+    title: "Community Health and Medical Care",
+    themes: ["medical care", "health", "clinic", "sickle-cell", "care", "survival"],
+    src: "/images/community-health.jpg"
+  },
+  {
+    id: "newspaper-media",
+    title: "Movement Newspaper and Media",
+    themes: ["newspaper", "media", "visual rhetoric", "communication", "archives", "education"],
+    src: "/images/newspaper-media.jpg"
+  },
+  {
+    id: "civic-education",
+    title: "Civic Education and Community Learning",
+    themes: ["education", "community learning", "discussion", "reflection", "museum", "public memory"],
+    src: "/images/civic-education.jpg"
+  },
+  {
+    id: "community-safety",
+    title: "Community Safety and Public Responsibility",
+    themes: ["police violence", "safety", "surveillance", "elder care", "self-determination"],
+    src: "/images/community-safety.jpg"
+  }
+];
 
 const phaseArc = [
   "Phase 1: orient learners through essential terms, context, and recognition.",
@@ -920,6 +973,60 @@ function getInteractivePrompt(settings, fallbackTask) {
   return fallbackTask;
 }
 
+function getVisualSearchText({ form, selectedNode, slide, selectedCorpusItems }) {
+  return [
+    form.theme,
+    form.goal,
+    selectedNode.title,
+    selectedNode.theme,
+    slide.title,
+    slide.slideType,
+    slide.concept,
+    slide.task,
+    selectedNode.corpusItemId,
+    ...selectedCorpusItems.map((item) => `${item.title} ${item.category} ${item.summary} ${(item.learningUses ?? []).join(" ")}`)
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function selectMuseumImage({ visualSettings, form, selectedNode, slide, selectedCorpusItems }) {
+  if (!visualSettings.autoPopulate && visualSettings.selectedImageId === "text-only") return null;
+  if (visualSettings.selectedImageId && visualSettings.selectedImageId !== "auto") {
+    return museumImages.find((image) => image.id === visualSettings.selectedImageId) ?? null;
+  }
+  if (!visualSettings.autoPopulate) return null;
+
+  const searchText = getVisualSearchText({ form, selectedNode, slide, selectedCorpusItems });
+  const scoredImages = museumImages.map((image) => {
+    const score = image.themes.reduce((total, theme) => {
+      const normalizedTheme = theme.toLowerCase();
+      return total + (searchText.includes(normalizedTheme) ? normalizedTheme.split(" ").length + 1 : 0);
+    }, 0);
+    const phaseBoost = Number(selectedNode.phase) >= 5 && image.id === "civic-education" ? 1 : 0;
+    const slideBoost =
+      slide.slideType === "discussion" || slide.slideType === "reflection"
+        ? image.id === "civic-education"
+          ? 2
+          : 0
+        : 0;
+    return { image, score: score + phaseBoost + slideBoost };
+  });
+
+  return scoredImages.sort((first, second) => second.score - first.score)[0]?.image ?? museumImages[0];
+}
+
+function getCourseVisual({ visualSettings, form, selectedNode, slide, selectedCorpusItems }) {
+  const image = selectMuseumImage({ visualSettings, form, selectedNode, slide, selectedCorpusItems });
+  return {
+    image,
+    style: visualSettings.visualStyle,
+    caption: visualSettings.caption || image?.title || selectedNode.theme,
+    imagePrompt: visualSettings.imagePrompt || slide.prompt
+  };
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -1672,7 +1779,9 @@ function SlideSettingsPanel({
   slideCountSetting,
   slideSettings,
   dynamicGenerationEnabled,
+  visualSettings,
   onDynamicGenerationChange,
+  onVisualSettingsChange,
   onSlideCountChange,
   onSelectedSlideChange,
   onSlideSettingsChange
@@ -1772,7 +1881,61 @@ function SlideSettingsPanel({
             onChange={(manualContent) => onSlideSettingsChange({ ...slideSettings, manualContent })}
           />
         ) : null}
+        <LearnerVisualSettings settings={visualSettings} onChange={onVisualSettingsChange} />
       </div>
+    </div>
+  );
+}
+
+function LearnerVisualSettings({ settings, onChange }) {
+  function update(key, value) {
+    onChange({ ...settings, [key]: value });
+  }
+
+  return (
+    <div className="learner-visual-settings">
+      <div className="section-label">
+        <Info size={16} /> Learner Visuals
+      </div>
+      <CheckboxField
+        label={`Auto-populate learner slide visuals: ${settings.autoPopulate ? "On" : "Off"}`}
+        checked={settings.autoPopulate}
+        onChange={(value) => update("autoPopulate", value)}
+      />
+      <SelectField
+        label="Learner visual style"
+        value={settings.visualStyle}
+        onChange={(value) => update("visualStyle", value)}
+        options={learnerVisualStyleOptions}
+      />
+      <SelectField
+        label="Selected image"
+        value={settings.selectedImageId}
+        onChange={(value) => update("selectedImageId", value)}
+        options={[
+          { value: "auto", label: "Auto-select" },
+          { value: "text-only", label: "No image / text only" },
+          ...museumImages.map((image) => ({ value: image.id, label: image.title }))
+        ]}
+      />
+      <label className="field-label">
+        <span>Optional caption</span>
+        <input
+          className="field-control"
+          value={settings.caption}
+          onChange={(event) => update("caption", event.target.value)}
+          placeholder="Use selected image title when blank"
+        />
+      </label>
+      <label className="field-label">
+        <span>Optional image prompt</span>
+        <textarea
+          className="field-control textarea small-textarea"
+          value={settings.imagePrompt}
+          onChange={(event) => update("imagePrompt", event.target.value)}
+          placeholder="Use generated image prompt when blank"
+        />
+      </label>
     </div>
   );
 }
@@ -2286,6 +2449,58 @@ function LearnerViewToggle({ learnerView, onChange }) {
   );
 }
 
+function CourseVisual({ slide, selectedNode, visual }) {
+  if (visual.style === "Text only" || !visual.image) {
+    return (
+      <div className="course-visual text-only">
+        <div className="course-visual-text-panel">
+          <span>{slideTypeLabels[slide.slideType]}</span>
+          <h3>{slide.title}</h3>
+          <p>{slide.task}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const backgroundStyle = { backgroundImage: `url("${visual.image.src}")` };
+  if (visual.style === "Image beside text") {
+    return (
+      <div className="course-visual image-beside-text">
+        <div className="course-image-frame" style={backgroundStyle} aria-label={visual.image.title}>
+          <div className="course-image-fallback">{visual.image.title}</div>
+        </div>
+        <div className="course-visual-text-panel">
+          <span>{visual.caption}</span>
+          <h3>{slide.title}</h3>
+          <p>{slide.concept}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (visual.style === "Image only with caption") {
+    return (
+      <figure className="course-visual image-caption">
+        <div className="course-image-frame" style={backgroundStyle} aria-label={visual.image.title}>
+          <div className="course-image-fallback">{visual.image.title}</div>
+        </div>
+        <figcaption>{visual.caption}</figcaption>
+      </figure>
+    );
+  }
+
+  return (
+    <div className="course-visual halftone-overlay" style={backgroundStyle}>
+      <div className="course-visual-text-panel">
+        <span>{visual.caption}</span>
+        <h3>{slide.title}</h3>
+        <p>{slide.concept}</p>
+      </div>
+      <div className="course-visual-prompt">{visual.imagePrompt}</div>
+    </div>
+  );
+}
+
 function CourseView({
   learnerView,
   onLearnerViewChange,
@@ -2301,7 +2516,8 @@ function CourseView({
   learningScreen,
   checkpoint,
   subModule,
-  onMasteryChoice
+  onMasteryChoice,
+  visual
 }) {
   return (
     <section className="course-view-shell">
@@ -2332,22 +2548,7 @@ function CourseView({
           selectedNode={selectedNode}
         />
 
-        <div className="course-hero">
-          <div className="halftone course-image">
-            <div className="placeholder-card">
-              <div>Image prompt</div>
-              <span>{selectedNode.theme}</span>
-            </div>
-          </div>
-          {slide.prompt ? (
-            <div className="prompt-box course-prompt">
-              <div className="section-label">
-                <Info size={15} /> Suggested Image Prompt
-              </div>
-              <p>{slide.prompt}</p>
-            </div>
-          ) : null}
-        </div>
+        <CourseVisual slide={slide} selectedNode={selectedNode} visual={visual} />
 
         <div className="course-content">
           <section>
@@ -2566,6 +2767,13 @@ function App() {
   const [isNavigatorHidden, setIsNavigatorHidden] = React.useState(false);
   const [navigatorDockPosition, setNavigatorDockPosition] = React.useState("below map");
   const [dynamicGenerationEnabled, setDynamicGenerationEnabled] = React.useState(true);
+  const [learnerVisualSettings, setLearnerVisualSettings] = React.useState({
+    autoPopulate: true,
+    visualStyle: "Halftone background with text overlay",
+    selectedImageId: "auto",
+    caption: "",
+    imagePrompt: ""
+  });
   const [learnerView, setLearnerView] = React.useState("course");
   const [openDesignerSections, setOpenDesignerSections] = React.useState({
     experience: true,
@@ -2600,6 +2808,13 @@ function App() {
     dynamicGenerationEnabled,
     slideGenerationContext
   );
+  const courseVisual = getCourseVisual({
+    visualSettings: learnerVisualSettings,
+    form,
+    selectedNode,
+    slide,
+    selectedCorpusItems
+  });
   const learningScreen = makeLearningScreen(selectedNode, slide, screenStatuses[selectedNode.id] ?? "not_started");
   const isDesignerMode = mode === "designer";
   const isLearnerMode = mode === "learner";
@@ -2899,6 +3114,7 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
           checkpoint={masteryCheckpoints[learningScreen.id]}
           subModule={adaptiveSubModules[learningScreen.id]}
           onMasteryChoice={handleMasteryChoice}
+          visual={courseVisual}
         />
       ) : (
       <section
@@ -2997,7 +3213,9 @@ ${slide.prompt ? `\nSuggested Image Prompt:\n${slide.prompt}` : ""}`;
                 slideCountSetting={selectedPhaseSlideSetting}
                 slideSettings={selectedSlideSettings}
                 dynamicGenerationEnabled={dynamicGenerationEnabled}
+                visualSettings={learnerVisualSettings}
                 onDynamicGenerationChange={setDynamicGenerationEnabled}
+                onVisualSettingsChange={setLearnerVisualSettings}
                 onSlideCountChange={updatePhaseSlideSetting}
                 onSelectedSlideChange={updateSelectedSlideIndex}
                 onSlideSettingsChange={updateSelectedSlideSettings}
